@@ -10,10 +10,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+
 class ExploitSkeleton(object):
     """
     Wrapper for exploit skeleton codes
     """
+
     def __init__(self):
         self.skeleton_basic = """
 #!/usr/bin/env python
