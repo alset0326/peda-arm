@@ -1270,7 +1270,6 @@ class PEDA(object):
             inst = self.execute_redirect("x/i 0x%x" % pc)
             if not inst:
                 return None
-        print(repr(inst))
 
         # init='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
         cond = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n){0,1}\s+', inst)
@@ -4335,7 +4334,9 @@ class PEDACmd(object):
                             text += " | %s\n" % line.strip()
                     text = format_disasm_code(text, pc) + "\n"
                     text += " |->"
+                    peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'), silent=True)
                     code = peda.get_disasm(jumpto, count // 2)
+                    peda.execute_redirect('set arm force-mode auto', silent=True)
                     if not code:
                         code = "   Cannot evaluate jump destination\n"
                     code = code.splitlines()
@@ -4403,6 +4404,8 @@ class PEDACmd(object):
 
         if not self._is_running():
             return
+
+        peda.execute_redirect('set height 0', silent=True)
 
         status = peda.get_status()
         # display registers
