@@ -170,7 +170,7 @@ class message(object):
     def bufferize(self, f=None):
         """Activate message's bufferization, can also be used as a decorater."""
 
-        if f != None:
+        if f is not None:
             @functools.wraps(f)
             def wrapper(*args, **kwargs):
                 self.bufferize()
@@ -294,7 +294,7 @@ def execute_external_command(command, cmd_input=None):
         - output of command (String)
     """
     result = ""
-    P = Popen([command], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=True)
+    P = Popen(command, stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=True)
     (result, err) = P.communicate(cmd_input)
     if err and config.Option.get("debug") == "on":
         warning_msg(err)
@@ -533,12 +533,13 @@ def format_disasm_code(code, nearby=None):
     Returns:
         - colorized text code (String)
     """
+    # tode
     colorcodes = {
         "cmp": "red",
-        "test": "red",
-        "call": "green",
-        "j": "yellow",  # jump
-        "ret": "blue",
+        # "test": "red",
+        # "call": "green",
+        "b": "yellow",  # jump
+        # "ret": "blue",
     }
     result = ""
 
@@ -555,15 +556,16 @@ def format_disasm_code(code, nearby=None):
             result += line + "\n"
         else:
             color = style = None
-            m = re.search(".*(0x[^ ]*).*:\s*([^ ]*)", line)
+            # tode
+            m = re.search(".*(0x\S*).*:\s*(\S*)", line)
             if not m:  # failed to parse
                 result += line + "\n"
                 continue
             addr, opcode = to_int(m.group(1)), m.group(2)
             for c in colorcodes:
-                if c in opcode:
+                if opcode.startswith(c):
                     color = colorcodes[c]
-                    if c == "call":
+                    if c == 'b':
                         for f in VULN_FUNCTIONS:
                             if f in line.split(":\t", 1)[-1]:
                                 style = "bold, underline"
@@ -572,7 +574,7 @@ def format_disasm_code(code, nearby=None):
                     break
 
             prefix = line.split(":\t")[0]
-            addr = re.search("(0x[^\s]*)", prefix)
+            addr = re.search("(0x\S*)", prefix)
             if addr:
                 addr = to_int(addr.group(1))
             else:

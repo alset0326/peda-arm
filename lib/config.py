@@ -14,10 +14,13 @@ from __future__ import print_function
 ## BEGIN OF SETTINGS ##
 
 # external binaries, required for some commands
-READELF = "/usr/bin/readelf"
-OBJDUMP = "/usr/bin/objdump"
-NASM = "/usr/bin/nasm"
+# tode
+READELF = "arm-none-linux-gnueabi-readelf"
+OBJDUMP = "arm-none-linux-gnueabi-objdump"
+# NASM = "/usr/bin/nasm"
 NDISASM = "/usr/bin/ndisasm"
+OBJCOPY = 'arm-none-linux-gnueabi-objcopy'
+AS = 'arm-none-linux-gnueabi-as'
 
 # PEDA global options
 OPTIONS = {
