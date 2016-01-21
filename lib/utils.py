@@ -214,17 +214,34 @@ msg = message()
 
 def warning_msg(text):
     """Colorize warning message with prefix"""
-    msg(colorize("Warning: " + str(text), "yellow"))
+    msg(colorize("[!] Warning: " + str(text), "yellow"))
+
+
+warning = warning_msg
 
 
 def error_msg(text):
     """Colorize error message with prefix"""
-    msg(colorize("Error: " + str(text), "red"))
+    msg(colorize("[!] Error: " + str(text), "red"))
+
+
+error = error_msg
 
 
 def debug_msg(text, prefix="Debug"):
     """Colorize debug message with prefix"""
     msg(colorize("%s: %s" % (prefix, str(text)), "cyan"))
+
+
+debug = debug_msg
+
+
+def info_msg(text):
+    '''Colorize info message with prefix'''
+    msg(green('[*] ') + str(text))
+
+
+info = info_msg
 
 
 def trim(docstring):

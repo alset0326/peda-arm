@@ -1,7 +1,8 @@
 import re
 import progressbar
-
+import pickle
 import requests
+import zlib
 
 reply = requests.get('http://ascii.mastervb.net/')
 # <option value="xhelvi.flf">xhelvi.flf</option>
@@ -9,8 +10,7 @@ pattern = re.compile('<option value="(\S+)">\S+</option>')
 m = pattern.findall(reply.text)
 
 print 'start!!'
-fd = open('logo.py', 'w')
-fd.write('LOGOS=[')
+l = []
 p = progressbar.ProgressBar(maxval=len(m)).start()
 for index, option in enumerate(m):
     p.update(index + 1)
@@ -22,9 +22,9 @@ for index, option in enumerate(m):
                                                                                   'html_mode': 'undefined'})
         t = str(reply.text)
         image = t[t.index('<pre>') + 5:t.index('</pre>')]
-        fd.write('"""%s""",' % image.encode('base64'))
+        l.append(image)
     except:
         print 'missing option: %s' % option
+open('logos', 'w').write(zlib.compress(pickle.dumps(l)))
 p.finish()
-fd.write(']')
-fd.close()
+
