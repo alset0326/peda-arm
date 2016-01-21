@@ -114,22 +114,18 @@ class PEDA(object):
                 traceback.print_exc()
             return False
 
-    def execute_redirect(self, gdb_command, silent=False):
+    def execute_redirect(self, gdb_command):
         """
         Execute a gdb command and capture its output
 
         Args:
             - gdb_command (String)
-            - silent: discard command's output, redirect to /dev/null (Bool)
 
         Returns:
             - output of command (String)
         """
-        result = None
         try:
             result = gdb.execute(gdb_command, to_string=True)
-            if silent:
-                result = None
         except Exception as e:
             if config.Option.get("debug") == "on":
                 msg('Exception (%s): %s' % (gdb_command, e), "red")
@@ -1196,9 +1192,9 @@ class PEDA(object):
                         break
             if found != 0:
                 break
-            self.execute_redirect("stepi", silent=True)
+            self.execute_redirect("stepi")
             if not self.is_address(addr, targetmap) or call_depth > maxdepth:
-                self.execute_redirect("finish", silent=True)
+                self.execute_redirect("finish")
             pc = 0
 
         return (call_depth - current_depth, current_instruction.strip())
@@ -1309,16 +1305,16 @@ class PEDA(object):
             if not inst:
                 return None
 
-        # init='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
-        cond = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n){0,1}\s+', inst)
+        # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
+        match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n){0,1}\s+', inst)
         next_addr = self.eval_target(inst)
         if next_addr is None:
             next_addr = 0
 
-        if cond is None:
+        if match is None:
             return None
 
-        cond = cond.group(2)
+        blx, cond, wn = match.groups()
         if (
                     cond == ''
         ) or (
@@ -1352,7 +1348,7 @@ class PEDA(object):
         ) or (
                             cond == 'le' and flags['Z'] and flags['N'] != flags['V']
         ):
-            return next_addr
+            return next_addr, blx
         else:
             return None
 
@@ -4318,10 +4314,10 @@ class PEDACmd(object):
                             stats.setdefault(code, 0)
                             stats[code] += 1
                             break
-                    peda.execute_redirect("stepi", silent=True)
+                    peda.execute_redirect("stepi")
                 else:
-                    peda.execute_redirect("stepi", silent=True)
-                    peda.execute_redirect("finish", silent=True)
+                    peda.execute_redirect("stepi")
+                    peda.execute_redirect("finish")
                 count -= 1
                 total += 1
         except:
@@ -4409,6 +4405,7 @@ class PEDACmd(object):
             if opcode.startswith('b'):
                 jumpto = peda.testjump(inst)
                 if jumpto:  # JUMP is taken
+                    jumpto, blx = jumpto
                     code = peda.disassemble_around(pc, count)
                     code = code.splitlines()
                     pc_idx = 999
@@ -4421,9 +4418,10 @@ class PEDACmd(object):
                             text += " | %s\n" % line.strip()
                     text = format_disasm_code(text, pc) + "\n"
                     text += " |->"
-                    peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'), silent=True)
+                    if 'x' in blx:
+                        peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'))
                     code = peda.get_disasm(jumpto, count // 2)
-                    peda.execute_redirect('set arm force-mode auto', silent=True)
+                    peda.execute_redirect('set arm force-mode auto')
                     if not code:
                         code = "   Cannot evaluate jump destination\n"
                     code = code.splitlines()
@@ -4494,7 +4492,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        peda.execute_redirect('set height 0', silent=True)
+        peda.execute_redirect('set height 0')
 
         status = peda.get_status()
         # display registers
