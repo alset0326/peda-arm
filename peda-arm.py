@@ -124,6 +124,7 @@ class PEDA(object):
         Returns:
             - output of command (String)
         """
+        result = None
         try:
             result = gdb.execute(gdb_command, to_string=True)
         except Exception as e:
@@ -1264,25 +1265,17 @@ class PEDA(object):
         Returns:
             - target address (Int)
         """
-        # todo
+        # tode
         target = None
         inst = inst.strip()
-        opcode = inst.split(":\t")[-1].split()[0]
-        # this regex includes x86_64 RIP relateive address reference
-        p = re.compile(".*?:\s*[^ ]*\s*(.* PTR ).*(0x[^ ]*)")
+        p = re.compile(".*:\s*\S*\s*(0x\S*)")
         m = p.search(inst)
-        if not m:
-            p = re.compile(".*?:\s.*(0x[^ ]*)")
-            m = p.search(inst)
-            if m:
-                target = m.group(1)
-            else:
-                target = None
+        if m:
+            target = m.group(1)
         else:
-            if "]" in m.group(2):  # e.g DWORD PTR [ebx+0xc]
-                p = re.compile(".*?:\s*[^ ]*\s*(.* PTR ).*\[(.*)\]")
-                m = p.search(inst)
-            target = self.parse_and_eval("%s[%s]" % (m.group(1), m.group(2).strip()))
+            p = re.compile(".*:\s*\S*\s*(\S*)")
+            m = p.search(inst)
+            target = self.parse_and_eval("%s" % m.group(1))
 
         return to_int(target)
 
@@ -1292,27 +1285,28 @@ class PEDA(object):
 
         Returns:
             - (status, address of target jumped instruction)
+            - (blx, the blx instruction)
         """
 
         flags = self.get_cpsr()
         if not flags:
-            return None
+            return None, None
 
         if not inst:
             pc = self.getreg("pc")
             # tode
             inst = self.execute_redirect("x/i 0x%x" % pc)
             if not inst:
-                return None
+                return None, None
 
         # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
-        match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n){0,1}\s+', inst)
+        match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
         next_addr = self.eval_target(inst)
         if next_addr is None:
             next_addr = 0
 
         if match is None:
-            return None
+            return None, None
 
         blx, cond, wn = match.groups()
         if (
@@ -1350,7 +1344,7 @@ class PEDA(object):
         ):
             return next_addr, blx
         else:
-            return None
+            return None, None
 
     def take_snapshot(self):
         """
@@ -4403,9 +4397,8 @@ class PEDACmd(object):
             opcode = inst.split(":\t")[-1].split()[0]
             # tode
             if opcode.startswith('b'):
-                jumpto = peda.testjump(inst)
+                jumpto, blx = peda.testjump(inst)
                 if jumpto:  # JUMP is taken
-                    jumpto, blx = jumpto
                     code = peda.disassemble_around(pc, count)
                     code = code.splitlines()
                     pc_idx = 999
@@ -4418,10 +4411,19 @@ class PEDACmd(object):
                             text += " | %s\n" % line.strip()
                     text = format_disasm_code(text, pc) + "\n"
                     text += " |->"
+                    code = None
                     if 'x' in blx:
+                        current_mode = peda.execute_redirect('show arm force-mode')
+                        match = re.search('"(.*)"', current_mode)
+                        if match:
+                            current_mode = match.group(1)
+                        else:
+                            current_mode = 'auto'
                         peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'))
-                    code = peda.get_disasm(jumpto, count // 2)
-                    peda.execute_redirect('set arm force-mode auto')
+                        code = peda.get_disasm(jumpto, count // 2)
+                        peda.execute_redirect('set arm force-mode %s' % current_mode)
+                    else:
+                        code = peda.get_disasm(jumpto, count // 2)
                     if not code:
                         code = "   Cannot evaluate jump destination\n"
                     code = code.splitlines()
@@ -4440,6 +4442,7 @@ class PEDACmd(object):
                 text += peda.disassemble_around(pc, count)
                 msg(format_disasm_code(text, pc))
                 if 'svc' in opcode:
+                    msg('')
                     self.syscall()
         else:  # invalid $PC
             msg("Invalid $PC address: 0x%x" % pc, "red")
