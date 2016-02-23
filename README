@@ -18,15 +18,7 @@ writing custom interactive Python GDB commands.
     - Python 2.6+
     - Utilities: nasm, readelf, objdump
 
-3. Installation
-    - Download
-        $ wget http://ropshell.com/peda/peda.tar.gz
-    - Unpack to HOME directory
-        $ tar zxvf peda.tar.gz
-    - Append a line to ~/.gdbinit to load PEDA when GDB starts
-        $ echo "source ~/peda/peda.py" >> ~/.gdbinit
-
-4. Usage
+3. Usage
     - List of available commands:
         gdb-peda$ peda help
 

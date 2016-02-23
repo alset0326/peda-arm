@@ -74,8 +74,8 @@ CPSR_M_INDEX = [0b10000, 0b10001, 0b10010, 0b10011, 0b10111, 0b11011, 0b11111]
 CPSR_MODES = dict(zip(CPSR_M_INDEX, CPSR_M_TEXT))
 
 MSG_LEGEND = blue('[') + ("Legend: %s, %s, %s, value" % ("code", "data", "rodata")).center(78, '-').replace('-', blue(
-        '-')).replace('code', red('code')).replace('data', blue('data'), 1).replace('rodata', green('rodata')) + blue(
-        ']')
+    '-')).replace('code', red('code')).replace('data', blue('data'), 1).replace('rodata', green('rodata')) + blue(
+    ']')
 
 with open(os.path.dirname(PEDAFILE) + '/lib/system_calls', 'r') as f:
     # {number:[function_name,name,params_num,[params...]]}
@@ -923,7 +923,7 @@ class PEDA(object):
             return result
 
         out = execute_external_command(
-                "%s -z --prefix-addresses -d '%s' | grep '%s'" % (config.OBJDUMP, tmpfd.name, search))
+            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (config.OBJDUMP, tmpfd.name, search))
         tmpfd.close()
 
         for line in out.splitlines():
@@ -1285,19 +1285,18 @@ class PEDA(object):
 
         Returns:
             - (status, address of target jumped instruction)
-            - (blx, the blx instruction)
         """
 
         flags = self.get_cpsr()
         if not flags:
-            return None, None
+            return None
 
         if not inst:
             pc = self.getreg("pc")
             # tode
             inst = self.execute_redirect("x/i 0x%x" % pc)
             if not inst:
-                return None, None
+                return None
 
         # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
         match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
@@ -1305,10 +1304,10 @@ class PEDA(object):
         if next_addr is None:
             next_addr = 0
 
-        if match is None:
-            return None, None
+        if not match:
+            return None
 
-        blx, cond, wn = match.groups()
+        cond = match.group(2)
         if (
                     cond == ''
         ) or (
@@ -1342,9 +1341,51 @@ class PEDA(object):
         ) or (
                             cond == 'le' and flags['Z'] and flags['N'] != flags['V']
         ):
-            return next_addr, blx
+            return next_addr
         else:
-            return None, None
+            return None
+
+    def testjump_cb(self, inst=None):
+        """
+        Test if jump instruction for `cb` is taken or not
+
+        Returns:
+            - (status, address of target jumped instruction)
+        """
+
+        flags = self.get_cpsr()
+        if not flags:
+            return None
+
+        if not inst:
+            pc = self.getreg("pc")
+            # tode
+            inst = self.execute_redirect("x/i 0x%x" % pc)
+            if not inst:
+                return None
+
+        # inst='=> 0xaf130bd4:\tcbz\tr0, 0xaf130be4'
+        match = re.match('.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)', inst)
+        if not match:
+            return None
+        cond, r, next_addr = match.groups()
+        r = self.parse_and_eval(r)
+        r = to_int(r)
+        if r is None:
+            return None
+        next_addr = self.parse_and_eval(next_addr)
+        next_addr = to_int(next_addr)
+        if next_addr is None:
+            next_addr = 0
+
+        if (
+                        cond == 'z' and r == 0
+        ) or (
+                        cond == 'nz' and r != 0
+        ):
+            return next_addr
+        else:
+            return None
 
     def take_snapshot(self):
         """
@@ -4397,7 +4438,7 @@ class PEDACmd(object):
             opcode = inst.split(":\t")[-1].split()[0]
             # tode
             if opcode.startswith('b'):
-                jumpto, blx = peda.testjump(inst)
+                jumpto = peda.testjump(inst)
                 if jumpto:  # JUMP is taken
                     code = peda.disassemble_around(pc, count)
                     code = code.splitlines()
@@ -4412,7 +4453,7 @@ class PEDACmd(object):
                     text = format_disasm_code(text, pc) + "\n"
                     text += " |->"
                     code = None
-                    if 'x' in blx:
+                    if 'x' in opcode:
                         current_mode = peda.execute_redirect('show arm force-mode')
                         match = re.search('"(.*)"', current_mode)
                         if match:
@@ -4433,6 +4474,34 @@ class PEDACmd(object):
                     text += red("JUMP is taken".rjust(79))
                     msg(text.rstrip())
                     self.dumpargs()
+                else:  # JUMP is NOT taken
+                    text += format_disasm_code(peda.disassemble_around(pc, count), pc)
+                    text += "\n" + green("JUMP is NOT taken".rjust(79))
+                    msg(text.rstrip())
+            elif opcode.startswith('cb'):
+                jumpto = peda.testjump_cb(inst)
+                if jumpto:  # JUMP is taken
+                    code = peda.disassemble_around(pc, count)
+                    code = code.splitlines()
+                    pc_idx = 999
+                    for (idx, line) in enumerate(code):
+                        if ("0x%x" % pc) in line.split(":")[0]:
+                            pc_idx = idx
+                        if idx <= pc_idx:
+                            text += line + "\n"
+                        else:
+                            text += " | %s\n" % line.strip()
+                    text = format_disasm_code(text, pc) + "\n"
+                    text += " |->"
+                    code = peda.get_disasm(jumpto, count // 2)
+                    if not code:
+                        code = "   Cannot evaluate jump destination\n"
+                    code = code.splitlines()
+                    text += red(code[0]) + "\n"
+                    for line in code[1:]:
+                        text += "       %s\n" % line.strip()
+                    text += red("JUMP is taken".rjust(79))
+                    msg(text.rstrip())
                 else:  # JUMP is NOT taken
                     text += format_disasm_code(peda.disassemble_around(pc, count), pc)
                     text += "\n" + green("JUMP is NOT taken".rjust(79))

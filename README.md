@@ -1,7 +1,7 @@
-peda
+peda-arm
 ====
 
-PEDA - Python Exploit Development Assistance for GDB
+PEDA-ARM - Python Exploit Development Assistance for GDB
 
 ## Key Features:
 * Enhance the display of gdb: colorize and display disassembly codes, registers, memory information during debugging.
@@ -29,13 +29,8 @@ PEDA - Python Exploit Development Assistance for GDB
 
 ## Installation
 
-    git clone https://github.com/longld/peda.git ~/peda
-    echo "source ~/peda/peda.py" >> ~/.gdbinit
+    git clone https://github.com/alset0326/peda-arm.git ~/peda
+    echo "source ~/peda-arm/peda-arm.py" >> ~/.gdbinit
     echo "DONE! debug your program with gdb and enjoy"
 
-## Screenshot
-![start](http://i.imgur.com/P1BF5mp.png)
 
-![pattern arg](http://i.imgur.com/W97OWRC.png)
-
-![patts](http://i.imgur.com/Br24IpC.png)
