@@ -29,8 +29,10 @@ PEDA-ARM - Python Exploit Development Assistance for GDB
 
 ## Installation
 
-    git clone https://github.com/alset0326/peda-arm.git ~/peda
+```
+    git clone https://github.com/alset0326/peda-arm.git ~/peda-arm
     echo "source ~/peda-arm/peda-arm.py" >> ~/.gdbinit
     echo "DONE! debug your program with gdb and enjoy"
+```
 
 
