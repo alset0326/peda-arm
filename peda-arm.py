@@ -435,11 +435,7 @@ class PEDA(object):
         # TODe
         vpath = "/proc/version"
         if self.is_target_remote():  # remote target
-            tmp = tmpfile()
-            self.execute("remote get %s %s" % (vpath, tmp.name))
-            tmp.seek(0)
-            out = tmp.read()
-            tmp.close()
+            out = self.read_from_remote(vpath)
         else:  # local target
             out = open(vpath).read()
 
@@ -1479,6 +1475,14 @@ class PEDA(object):
         snapshot = pickle.load(fd)
         return self.give_snapshot(snapshot)
 
+    def read_from_remote(self, path):
+        tmp = tmpfile()
+        self.execute("remote get %s %s" % (path, tmp.name))
+        tmp.seek(0)
+        out = tmp.read()
+        tmp.close()
+        return out
+
     #########################
     #   Memory Operations   #
     #########################
@@ -1553,11 +1557,7 @@ class PEDA(object):
             pattern = re.compile("([0-9a-f]*)-([0-9a-f]*) ([rwxps-]*)(?: [^ ]*){3} *(.*)")
 
             if remote:  # remote target
-                tmp = tmpfile()
-                self.execute("remote get %s %s" % (mpath, tmp.name))
-                tmp.seek(0)
-                out = tmp.read()
-                tmp.close()
+                out = self.read_from_remote(mpath)
             else:  # local target
                 out = open(mpath).read()
 
@@ -4123,9 +4123,9 @@ class PEDACmd(object):
         (keyword, mapname) = normalize_argv(arg, 2)
         # todo
         if keyword:
-            self.stepuntil("j.*%s" % keyword, mapname)
+            self.stepuntil("b.*%s" % keyword, mapname)
         else:
-            self.stepuntil("j", mapname)
+            self.stepuntil("b", mapname)
         return
 
     # stepuntil()
@@ -4389,16 +4389,22 @@ class PEDACmd(object):
         """
         Display source information of current execution context
         Usage:
-            MYNAME
+            MYNAME [linecount]
         """
         if not self._is_running():
             return
+        (count,) = normalize_argv(arg, 1)
         sal = gdb.selected_frame().find_sal()
         if sal.line == 0:
             return
 
-        line_str = str(sal.line)
-        out = peda.execute_redirect('list "%s":%s' % (sal.symtab.fullname(), line_str))
+        line_num = sal.line
+        line_str = str(line_num)
+        if count is None:
+            out = peda.execute_redirect('list "%s":%s' % (sal.symtab.fullname(), line_str))
+        else:
+            out = peda.execute_redirect(
+                'list "%s":%d,%d' % (sal.symtab.fullname(), line_num - count / 2, line_num + count / 2))
         if not out:
             return
 
@@ -4590,6 +4596,18 @@ class PEDACmd(object):
             msg("Stopped reason: %s" % red(status))
 
         return
+
+    def pflush(self, *arg):
+        """
+            Flush msg buffer if something went wrong.
+            Usage:
+                MYNAME
+        """
+
+        try:
+            msg.flush()
+        except ValueError:
+            info_msg("Buffer is empty")
 
     #################################
     #   Memory Operation Commands   #
@@ -6349,6 +6367,9 @@ Alias("jtrace", "peda traceinst j")
 Alias("stack", "peda telescope $sp")
 Alias("viewmem", "peda telescope")
 Alias("reg", "peda xinfo register")
+Alias("arm", "set arm force-mode arm")
+Alias("thumb", "set arm force-mode thumb")
+Alias("auto", "set arm force-mode auto")
 
 # misc gdb settings
 peda.execute("set confirm off")
@@ -6365,6 +6386,7 @@ peda.execute("set step-mode on")
 peda.execute("set print pretty on")
 peda.execute("handle SIGALRM print nopass")  # ignore SIGALRM
 peda.execute("handle SIGSEGV stop print nopass")  # catch SIGSEGV
+peda.execute('set gnutarget elf32-littlearm')  # set target arm
 info('registering commands.')
 msg('')
 
