@@ -9,18 +9,33 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from subprocess import Popen, PIPE
+
+
+def check_command(command):
+    p = Popen(command, stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=True)
+    p.communicate()
+    err = p.wait()
+    return err == 0
+
 
 # change below settings to match your needs
 ## BEGIN OF SETTINGS ##
 
 # external binaries, required for some commands
 # tode
-READELF = "arm-none-linux-gnueabi-readelf"
-OBJDUMP = "arm-none-linux-gnueabi-objdump"
-# NASM = "/usr/bin/nasm"
-NDISASM = "/usr/bin/ndisasm"
-OBJCOPY = 'arm-none-linux-gnueabi-objcopy'
-AS = 'arm-none-linux-gnueabi-as'
+PREFIXES = "arm-none-eabi- arm-eabi- arm-androideabi- arm-none-linux-gnueabi- arm-linux-androideabi- arm-linux-android- arm-linux-eabi-"
+prefix = ''
+for i in PREFIXES.split():
+    command = "which %sobjdump" % i
+    if check_command(command):
+        prefix = i
+        break
+
+READELF = "%sreadelf" % prefix
+OBJDUMP = "%sobjdump" % prefix
+OBJCOPY = '%sobjcopy' % prefix
+AS = '%sas' % prefix
 
 # PEDA global options
 OPTIONS = {

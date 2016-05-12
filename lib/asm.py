@@ -14,6 +14,9 @@ import os
 from utils import *
 import config
 
+if config.prefix == '':
+    warning('Cross compile toolchain not found! You can install it from https://github.com/jsnyder/arm-eabi-toolchain')
+
 
 class Asm(object):
     """

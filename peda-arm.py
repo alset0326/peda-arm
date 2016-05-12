@@ -19,10 +19,15 @@ import string
 import sys
 import time
 import traceback
-
-import cPickle as pickle
 import random
-import zlib
+import struct
+import fcntl
+import termios
+
+try:
+    import zlib
+except ImportError:
+    zlib = None
 
 # point to absolute path of peda.py
 PEDAFILE = os.path.abspath(os.path.expanduser(__file__))
@@ -73,14 +78,16 @@ CPSR_M_TEXT = ['user', 'fiq', 'irq', 'supervisor', 'abort', 'undefined', 'system
 CPSR_M_INDEX = [0b10000, 0b10001, 0b10010, 0b10011, 0b10111, 0b11011, 0b11111]
 CPSR_MODES = dict(zip(CPSR_M_INDEX, CPSR_M_TEXT))
 
-MSG_LEGEND = blue('[') + ("Legend: %s, %s, %s, value" % ("code", "data", "rodata")).center(78, '-').replace('-', blue(
-    '-')).replace('code', red('code')).replace('data', blue('data'), 1).replace('rodata', green('rodata')) + blue(
-    ']')
+MSG_LEGEND = "Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata"))
 
-with open(os.path.dirname(PEDAFILE) + '/lib/system_calls', 'r') as f:
-    # {number:[function_name,name,params_num,[params...]]}
-    SYSTEM_CALLS = pickle.loads(zlib.decompress(f.read()))
-info('Loading system calls.')
+if zlib:
+    with open(os.path.dirname(PEDAFILE) + '/lib/system_calls', 'r') as f:
+        # {number:[function_name,name,params_num,[params...]]}
+        SYSTEM_CALLS = pickle.loads(zlib.decompress(f.read()))
+    info('Loading system calls.')
+else:
+    SYSTEM_CALLS = None
+    warning('zlib module not supported. Syscall lookup is disabled.')
 
 
 ###########################################################################
@@ -3087,6 +3094,7 @@ class PEDACmd(object):
     def __init__(self):
         # list of all available commands
         self.commands = [c for c in dir(self) if callable(getattr(self, c)) and not c.startswith("_")]
+        self.width = 78
 
     ##################
     #   Misc Utils   #
@@ -3111,6 +3119,21 @@ class PEDACmd(object):
             # raise Exception(text)
         else:
             return pid
+
+    def _update_width(self, fd=1):
+        '''
+        update width
+
+        Args:
+            fd: int defaults to the main terminal
+
+        Returns: None
+
+        '''
+        # first 2 shorts (4 byte) of struct winsize
+        raw = fcntl.ioctl(fd, termios.TIOCGWINSZ, ' ' * 4)
+        height, width = struct.unpack('hh', raw)
+        self.width = int(width) - 2
 
     def reload(self, *arg):
         """
@@ -3946,6 +3969,9 @@ class PEDACmd(object):
             MYNAME [num]
                 nun: force to display "system call num" instead of figure out register r7
         """
+        if SYSTEM_CALLS is None:
+            return
+
         (num,) = normalize_argv(arg, 1)
         if not self._is_running():
             return
@@ -3979,6 +4005,8 @@ class PEDACmd(object):
             MYNAME num | syscall_name
                 nun: force to display "system call num" instead of figure out register r7
         """
+        if SYSTEM_CALLS is None:
+            return
         (num,) = normalize_argv(arg, 1)
         if num is None:
             self._missing_argument()
@@ -4379,7 +4407,7 @@ class PEDACmd(object):
 
         # pc = peda.getreg("pc")
         # display register info
-        msg("[%s]" % "REGISTERS".center(78, "-"), "blue")
+        msg("[%s]" % "REGISTERS".center(self.width, "-"), "blue")
         self.xinfo("register")
 
         return
@@ -4408,7 +4436,7 @@ class PEDACmd(object):
         if not out:
             return
 
-        msg("[%s]" % "SOURCE".center(78, "-"), "blue")
+        msg("[%s]" % "SOURCE".center(self.width, "-"), "blue")
         msg('/* source path at %s:%s */' % (sal.symtab.fullname(), line_str))
         for line in out.splitlines()[1:]:
             if line.startswith(line_str):
@@ -4437,7 +4465,7 @@ class PEDACmd(object):
         else:
             inst = None
 
-        text = blue("[%s]" % "CODE".center(78, "-"))
+        text = blue("[%s]" % "CODE".center(self.width, "-"))
         msg(text)
         if inst:  # valid $PC
             text = ""
@@ -4536,7 +4564,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        text = blue("[%s]" % "STACK".center(78, "-"))
+        text = blue("[%s]" % "STACK".center(self.width, "-"))
         msg(text)
         sp = peda.getreg("sp")
         if peda.is_address(sp):
@@ -4570,7 +4598,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        peda.execute_redirect('set height 0')
+        self._update_width()
 
         status = peda.get_status()
         # display registers
@@ -4589,13 +4617,15 @@ class PEDACmd(object):
         if "stack" in opt or "SIGSEGV" in status:
             self.context_stack(count)
 
-        msg(MSG_LEGEND)
+        msg('\033[;34m[%s]\033[0m' % ('\033[0m%s\033[;34m' % MSG_LEGEND).center(self.width + 40, "-"), "blue")
 
         # display stopped reason
         if "SIG" in status:
             msg("Stopped reason: %s" % red(status))
 
         return
+
+    context.options = ['code', 'stack', 'source', 'register']
 
     def pflush(self, *arg):
         """
@@ -4607,7 +4637,7 @@ class PEDACmd(object):
         try:
             msg.flush()
         except ValueError:
-            info_msg("Buffer is empty")
+            info("Buffer is empty")
 
     #################################
     #   Memory Operation Commands   #
@@ -6151,7 +6181,7 @@ class PEDACmd(object):
         logname = peda.get_config_filename("crashlog")
         logfd = open(logname, "a")
         config.Option.set("_teefd", logfd)
-        msg("[%s]" % "START OF CRASH DUMP".center(78, "-"))
+        msg("[%s]" % "START OF CRASH DUMP".center(self.width, "-"))
         msg("Timestamp: %s" % time.ctime())
         msg("Reason: %s" % red(reason))
 
@@ -6169,10 +6199,10 @@ class PEDACmd(object):
         self.context_stack()
 
         # backtrace
-        msg("[%s]" % "backtrace (innermost 10 frames)".center(78, "-"), "blue")
+        msg("[%s]" % "backtrace (innermost 10 frames)".center(self.width, "-"), "blue")
         msg(peda.execute_redirect("backtrace 10"))
 
-        msg("[%s]\n" % "END OF CRASH DUMP".center(78, "-"))
+        msg("[%s]\n" % "END OF CRASH DUMP".center(self.width, "-"))
         config.Option.set("_teefd", "")
         logfd.close()
 
@@ -6386,12 +6416,16 @@ peda.execute("set step-mode on")
 peda.execute("set print pretty on")
 peda.execute("handle SIGALRM print nopass")  # ignore SIGALRM
 peda.execute("handle SIGSEGV stop print nopass")  # catch SIGSEGV
-peda.execute('set gnutarget elf32-littlearm')  # set target arm
+peda.execute('set pagination off')  # set target arm
 info('registering commands.')
 msg('')
 
-with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'r') as f:
-    logos = pickle.loads(zlib.decompress(f.read()))
-msg(blue(logos[random.randint(0, len(logos) - 1)], 'bold'))
-msg(red('alpha-0.2'.rjust(random.randint(0, len(logos) - 1) + 10)))
-msg('')
+if zlib:
+    with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'r') as f:
+        logos = pickle.loads(zlib.decompress(f.read()))
+    msg(blue(logos[random.randint(0, len(logos) - 1)], 'bold'))
+    msg(red('alpha-0.2'.rjust(random.randint(10, len(logos) + 10))))
+    msg('')
+else:
+    msg(red('PEDA-ARM alpha-0.2'.rjust(random.randint(10, 50))))
+    msg('')
