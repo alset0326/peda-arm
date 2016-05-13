@@ -1332,17 +1332,17 @@ class PEDA(object):
         ) or (
                         cond == 'vc' and not flags['V']
         ) or (
-                            cond == 'hi' and flags['C'] and not flags['Z']
+                        cond == 'hi' and (flags['C'] or not flags['Z'])
         ) or (
-                            cond == 'ls' and not flags['C'] and flags['Z']
+                        cond == 'ls' and (not flags['C'] or flags['Z'])
         ) or (
                         cond == 'ge' and flags['N'] == flags['V']
         ) or (
                         cond == 'lt' and flags['N'] != flags['V']
         ) or (
-                            cond == 'gt' and not flags['Z'] and flags['N'] == flags['V']
+                        cond == 'gt' and (not flags['Z'] or flags['N'] == flags['V'])
         ) or (
-                            cond == 'le' and flags['Z'] and flags['N'] != flags['V']
+                        cond == 'le' and (flags['Z'] or flags['N'] != flags['V'])
         ):
             return next_addr
         else:
@@ -4038,12 +4038,16 @@ class PEDACmd(object):
         """
             Use tbreak to step over the current instruction.
             Usage:
-                MYNAME
+                MYNAME [count]
             """
+        (count,) = normalize_argv(arg, 1)
+        if to_int(count) is None:
+            count = 1
+
         if not self._is_running():
             return
 
-        next_code = peda.next_inst(peda.getreg("pc"))
+        next_code = peda.next_inst(peda.getreg("pc"), count)
         if not next_code:
             warning("failed to get next instructions")
             return
