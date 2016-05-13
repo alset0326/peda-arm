@@ -4034,6 +4034,22 @@ class PEDACmd(object):
             peda.execute("continue")
         return
 
+    def stepover(self):
+        """
+            Use tbreak to step over the current instruction.
+            Usage:
+                MYNAME
+            """
+        if not self._is_running():
+            return
+
+        next_code = peda.next_inst(peda.getreg("pc"))
+        if not next_code:
+            warning("failed to get next instructions")
+            return
+        next_addr = next_code[-1][0]
+        self.xuntil(next_addr)
+
     def goto(self, *arg):
         """
         Goto an address
@@ -4601,23 +4617,30 @@ class PEDACmd(object):
         self._update_width()
 
         status = peda.get_status()
+        need_footer = False
+
         # display registers
         if "reg" in opt or "register" in opt:
             self.context_register()
+            need_footer = True
 
         # display source
         if 'source' in opt:
             self.context_source()
+            need_footer = True
 
         # display assembly code
         if "code" in opt:
             self.context_code(count)
+            need_footer = True
 
         # display stack content, forced in case SIGSEGV
         if "stack" in opt or "SIGSEGV" in status:
             self.context_stack(count)
+            need_footer = True
 
-        msg('\033[;34m[%s]\033[0m' % ('\033[0m%s\033[;34m' % MSG_LEGEND).center(self.width + 40, "-"), "blue")
+        if need_footer:
+            msg('\033[;34m[%s]\033[0m' % ('\033[0m%s\033[;34m' % MSG_LEGEND).center(self.width + 40, "-"), "blue")
 
         # display stopped reason
         if "SIG" in status:
