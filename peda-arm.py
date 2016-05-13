@@ -4034,7 +4034,7 @@ class PEDACmd(object):
             peda.execute("continue")
         return
 
-    def stepover(self):
+    def stepover(self, *arg):
         """
             Use tbreak to step over the current instruction.
             Usage:
