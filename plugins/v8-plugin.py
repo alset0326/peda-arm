@@ -564,7 +564,7 @@ class Handle:
             self._type = self._class = None
         if self._type is None:
             if has_smi_tag(self._location):
-                return smi_to_int(bitness)
+                return smi_to_int(self._location)
             elif has_failure_tag(self._location):
                 return ['Has failure tag. Maybe Failure Object?']
             elif has_heap_object_tag(self._location):
