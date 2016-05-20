@@ -23,6 +23,7 @@ import random
 import struct
 import fcntl
 import termios
+import gdb  # for ide
 
 try:
     import zlib
@@ -33,6 +34,7 @@ except ImportError:
 PEDAFILE = os.path.abspath(os.path.expanduser(__file__))
 if os.path.islink(PEDAFILE):
     PEDAFILE = os.readlink(PEDAFILE)
+sys.path.insert(0, os.path.dirname(PEDAFILE) + "/plugins/")
 sys.path.insert(0, os.path.dirname(PEDAFILE) + "/lib/")
 
 # Use six library to provide Python 2/3 compatibility
@@ -1726,9 +1728,7 @@ class PEDA(object):
         logfd = tmpfile(is_binary_file=True)
         logname = logfd.name
         out = self.execute_redirect("dump memory %s 0x%x 0x%x" % (logname, start, end))
-        if out is None:
-            return None
-        else:
+        if out is not None:
             logfd.flush()
             mem = logfd.read()
             logfd.close()
@@ -2484,7 +2484,7 @@ class PEDA(object):
         p = re.compile(".*\[.*\] (\.[^ ]*) [^0-9]* ([^ ]*) [^ ]* ([^ ]*)(.*)")
         matches = p.findall(out)
         if not matches:
-            return result
+            return None
 
         for (hname, start, size, attr) in matches:
             start, end = to_int("0x" + start), to_int("0x" + start) + to_int("0x" + size)
@@ -3095,6 +3095,7 @@ class PEDACmd(object):
         # list of all available commands
         self.commands = [c for c in dir(self) if callable(getattr(self, c)) and not c.startswith("_")]
         self.width = 78
+        self.plugins = {}
 
     ##################
     #   Misc Utils   #
@@ -3121,7 +3122,7 @@ class PEDACmd(object):
             return pid
 
     def _update_width(self, fd=1):
-        '''
+        """
         update width
 
         Args:
@@ -3129,7 +3130,7 @@ class PEDACmd(object):
 
         Returns: None
 
-        '''
+        """
         # first 2 shorts (4 byte) of struct winsize
         raw = fcntl.ioctl(fd, termios.TIOCGWINSZ, ' ' * 4)
         height, width = struct.unpack('hh', raw)
@@ -3181,7 +3182,7 @@ class PEDACmd(object):
                 if not cmd.startswith("_"):  # skip internal use commands
                     func = getattr(self, cmd)
                     helptext += "%s -- %s\n" % (cmd, green(trim(func.__doc__.strip("\n").splitlines()[0])))
-            helptext += "\nType \"help\" followed by subcommand for full documentation."
+            helptext += '\nType "help" followed by subcommand for full documentation.'
         else:
             if cmd in self.commands:
                 func = getattr(self, cmd)
@@ -3389,7 +3390,7 @@ class PEDACmd(object):
         elif opt.startswith("env"):
             _set_env(name, value)
         else:
-            msg("Unknown set option: %s" % known_args.opt)
+            warning("Unknown set option: %s" % opt)
         return
 
     set.options = ["option", "arg", "env"]
@@ -3457,7 +3458,7 @@ class PEDACmd(object):
 
         bytes_ = peda.dumpmem(address, address + count)
         if bytes_ is None:
-            warning("cannot retrieve memory content")
+            warning("Cannot retrieve memory content")
         else:
             linelen = 16  # display 16-bytes per line
             i = 0
@@ -4044,6 +4045,9 @@ class PEDACmd(object):
         if to_int(count) is None:
             count = 1
 
+        if count < 1:
+            count = 1
+
         if not self._is_running():
             return
 
@@ -4460,7 +4464,7 @@ class PEDACmd(object):
         msg('/* source path at %s:%s */' % (sal.symtab.fullname(), line_str))
         for line in out.splitlines()[1:]:
             if line.startswith(line_str):
-                msg(green(line, 'bold'))
+                msg(line, 'green', 'bold')
             else:
                 msg(line)
 
@@ -4525,12 +4529,12 @@ class PEDACmd(object):
                     text += red(code[0]) + "\n"
                     for line in code[1:]:
                         text += "       %s\n" % line.strip()
-                    text += red("JUMP is taken".rjust(79))
+                    text += red("JUMP is taken".rjust(self.width))
                     msg(text.rstrip())
                     self.dumpargs()
                 else:  # JUMP is NOT taken
                     text += format_disasm_code(peda.disassemble_around(pc, count), pc)
-                    text += "\n" + green("JUMP is NOT taken".rjust(79))
+                    text += "\n" + green("JUMP is NOT taken".rjust(self.width))
                     msg(text.rstrip())
             elif opcode.startswith('cb'):
                 jumpto = peda.testjump_cb(inst)
@@ -4554,11 +4558,11 @@ class PEDACmd(object):
                     text += red(code[0]) + "\n"
                     for line in code[1:]:
                         text += "       %s\n" % line.strip()
-                    text += red("JUMP is taken".rjust(79))
+                    text += red("JUMP is taken".rjust(self.width))
                     msg(text.rstrip())
                 else:  # JUMP is NOT taken
                     text += format_disasm_code(peda.disassemble_around(pc, count), pc)
-                    text += "\n" + green("JUMP is NOT taken".rjust(79))
+                    text += "\n" + green("JUMP is NOT taken".rjust(self.width))
                     msg(text.rstrip())
             # stopped at other instructions
             else:
@@ -6274,6 +6278,91 @@ class PEDACmd(object):
 
     utils.options = ["int2hexstr", "list2hexstr", "str2intlist"]
 
+    ####################################
+    #           Plugins support        #
+    ####################################
+    def plugin(self, *arg):
+        """
+        List or Load plugins.
+        Usage:
+            MYNAME [name] [reload]
+        """
+        (name, opt) = normalize_argv(arg, 2)
+        if name is None:
+            msg('Available plugins:', 'blue')
+            files = []
+            self.plugin.__func__.options = []
+            for f in os.listdir(os.path.dirname(PEDAFILE) + "/plugins/"):
+                if f.endswith('-plugin.py'):
+                    tmp = f[:-10]
+                    self.plugin.__func__.options.append(tmp)
+                    files.append(green(tmp) + red('*') if tmp in self.plugins else tmp)
+            msg('\t'.join(files))
+        elif name in self.plugins:
+            if not opt or not str(opt).startswith('r'):
+                warning('Plugin %s already loaded!' % name)
+                warning('Please use "plugin %s reload" to force reload.)' % name)
+                return
+            info('Plugin %s is reloading.' % name)
+            m = reload_module('%s-plugin' % name)
+            if m is None or not hasattr(m, 'invoke') or not callable(getattr(m, 'invoke')):
+                error('Reload plugin failed. Please check the plugin file or restart gdb.')
+                return
+            func = getattr(m, 'invoke')
+            self.plugins[name] = func
+            info('Plugin %s reloaded.' % name)
+        else:
+            if not os.path.exists(os.path.dirname(PEDAFILE) + "/plugins/%s-plugin.py" % name):
+                error('Plugin %s does not Exist!!' % name)
+                return
+            m = __import__('%s-plugin' % name)
+            if not hasattr(m, 'invoke') or not callable(getattr(m, 'invoke')):
+                error('Not a valid plugin file!')
+                return
+            func = getattr(m, 'invoke')
+            self.plugins[name] = func
+            PluginCommand(name)
+            info('Plugin %s loaded.' % name)
+            info('Plugin doc:%s' % green(func.__doc__))
+
+    plugin.options = [i[:-10] for i in os.listdir(os.path.dirname(PEDAFILE) + "/plugins/") if i.endswith('-plugin.py')]
+
+
+###########################################################################
+class PluginCommand(gdb.Command):
+    """
+    Wrapper of gdb.Command for added plugins.
+    """
+
+    def __init__(self, name):
+        self.name = name
+        func = pedacmd.plugins.get(self.name)
+        self.__doc__ = func.__doc__
+        super(PluginCommand, self).__init__(self.name, gdb.COMMAND_NONE)
+
+    def invoke(self, arg_string, from_tty):
+        self.dont_repeat()
+        arg = peda.string_to_argv(arg_string)
+        func = pedacmd.plugins.get(self.name)
+        try:
+            reset_cache(sys.modules['__main__'])
+            func(peda, *arg)
+        except Exception as e:
+            if config.Option.get("debug") == "on":
+                msg("Exception: %s" % e)
+                traceback.print_exc()
+            peda.restore_user_command("all")
+            msg(self.__doc__, 'green')
+
+    def complete(self, text, word):
+        func = pedacmd.plugins.get(self.name)
+        options = func.options if hasattr(func, 'options') else []
+        opname = [x for x in options if x.startswith(text.strip())]
+        if opname:
+            return opname
+        else:
+            return []
+
 
 ###########################################################################
 class pedaGDBCommand(gdb.Command):
@@ -6307,7 +6396,7 @@ class pedaGDBCommand(gdb.Command):
                     peda.restore_user_command("all")
                     pedacmd.help(cmd)
             else:
-                msg("Undefined command: %s. Try \"peda help\"" % cmd)
+                warning('Undefined command: %s. Try "peda help"' % cmd)
         return
 
     def complete(self, text, word):
@@ -6337,7 +6426,7 @@ class Alias(gdb.Command):
     This doc should be changed dynamically
     """
 
-    def __init__(self, alias, command, shorttext=1):
+    def __init__(self, alias, command, shorttext=True):
         (cmd, opt) = (command + " ").split(" ", 1)
         if cmd == "peda" or cmd == "pead":
             cmd = opt.split(" ")[0]
@@ -6355,15 +6444,18 @@ class Alias(gdb.Command):
 
     def complete(self, text, word):
         completion = []
-        cmd = self._command.split("peda ")[1]
+        cmds = self._command.split()
+        if cmds[0] != 'peda':
+            return completion
+        cmd = cmds[1]
         for opt in getattr(pedacmd, cmd).options:  # list of command's options
             if text in opt and opt not in completion:
-                completion += [opt]
-        if completion != []:
+                completion.append(opt)
+        if completion:
             return completion
         if cmd in ["set", "show"] and text.split()[0] in ["option"]:
             opname = [x for x in config.OPTIONS.keys() if x.startswith(word.strip())]
-            if opname != []:
+            if opname:
                 completion = opname
             else:
                 completion = list(config.OPTIONS.keys())
@@ -6433,7 +6525,6 @@ peda.execute("set confirm off")
 peda.execute("set verbose off")
 peda.execute("set output-radix 0x10")
 peda.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
-peda.execute("set height 0")  # disable paging
 peda.execute("set history expansion on")
 peda.execute("set history save on")  # enable history saving
 # peda.execute("set disassembly-flavor intel") #no need
@@ -6443,16 +6534,16 @@ peda.execute("set step-mode on")
 peda.execute("set print pretty on")
 peda.execute("handle SIGALRM print nopass")  # ignore SIGALRM
 peda.execute("handle SIGSEGV stop print nopass")  # catch SIGSEGV
-peda.execute('set pagination off')  # set target arm
+peda.execute('set pagination off')  # disable paging
 info('registering commands.')
 msg('')
 
 if zlib:
     with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'r') as f:
         logos = pickle.loads(zlib.decompress(f.read()))
-    msg(blue(logos[random.randint(0, len(logos) - 1)], 'bold'))
-    msg(red('alpha-0.2'.rjust(random.randint(10, len(logos) + 10))))
+    msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
+    msg('alpha-0.3'.rjust(random.randint(10, len(logos) + 10)), 'red')
     msg('')
 else:
-    msg(red('PEDA-ARM alpha-0.2'.rjust(random.randint(10, 50))))
+    msg('PEDA-ARM alpha-0.3'.rjust(random.randint(10, 50)), 'red')
     msg('')
