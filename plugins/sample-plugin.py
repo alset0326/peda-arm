@@ -2,7 +2,7 @@ def invoke(peda, *arg):
     """
     Sample invoke
     Usage:
-        Sample
+        sample
     """
     print('Sample plugin successfully invoked.')
 

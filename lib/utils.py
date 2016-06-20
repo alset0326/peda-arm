@@ -28,7 +28,9 @@ from six import StringIO
 from six.moves import range
 from six.moves import input
 
-if reload is None:
+try:
+    reload is None
+except NameError:
     try:
         from importlib import reload
     except ImportError:

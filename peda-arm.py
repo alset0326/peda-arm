@@ -527,6 +527,18 @@ class PEDA(object):
 
         return None
 
+    def getpc(self):
+        """
+        Get value of pc
+
+        Returns: pc (int)
+
+        """
+        try:
+            return gdb.selected_frame().pc()
+        except:
+            return self.getreg('pc')
+
     def set_breakpoint(self, location, temp=None, hard=None):
         """
         Wrapper for GDB break command
@@ -800,14 +812,13 @@ class PEDA(object):
             if self.getpid() and not self.is_address(address - backward + i):
                 continue
 
-            code = self.execute_redirect("disassemble %s, %s" % (to_hex(address - backward + i), to_hex(address + 1)))
-            if code and ("%x" % address) in code:
-                lines = code.strip().splitlines()[1:-1]
-                if len(lines) > count and "(bad)" not in " ".join(lines):
-                    for line in lines[-count - 1:-1]:
-                        (addr, code) = line.split(":", 1)
-                        addr = re.search("(0x[^ ]*)", addr).group(1)
-                        result += [(to_int(addr), code)]
+            codes = gdb.selected_frame().architecture().disassemble(address - backward + i, address + 1)
+            for code in codes[::-1]:
+                if code.get('addr') == address:
+                    if len(codes) <= count:
+                        break
+                    for code2 in codes[-count - 1:-1]:
+                        result.append((code2.get('addr'), code2.get('asm')))
                     return result
         return None
 
@@ -1058,7 +1069,7 @@ class PEDA(object):
             return []
 
         (arch, bits) = self.getarch()
-        pc = self.getreg("pc")
+        pc = self.getpc()
         prev_insts = self.prev_inst(pc, 12)
 
         code = ""
@@ -1153,7 +1164,7 @@ class PEDA(object):
         binmap = self.get_vmmap("binary")
 
         current_instruction = ""
-        pc = self.getreg("pc")
+        pc = self.getpc()
 
         if depth is None:
             current_depth = self.backtrace_depth(self.getreg("sp"))
@@ -1297,7 +1308,7 @@ class PEDA(object):
             return None
 
         if not inst:
-            pc = self.getreg("pc")
+            pc = self.getpc()
             # tode
             inst = self.execute_redirect("x/i 0x%x" % pc)
             if not inst:
@@ -1363,7 +1374,7 @@ class PEDA(object):
             return None
 
         if not inst:
-            pc = self.getreg("pc")
+            pc = self.getpc()
             # tode
             inst = self.execute_redirect("x/i 0x%x" % pc)
             if not inst:
@@ -3172,34 +3183,33 @@ class PEDACmd(object):
         """
 
         (cmd,) = normalize_argv(arg, 1)
-        helptext = ""
+        helptext = []
         if cmd is None:
-            helptext = red("PEDA", "bold") + blue(" - Python Exploit Development Assistance for GDB", "bold") + "\n"
+            helptext.append(red("PEDA", "bold") + blue(" - Python Exploit Development Assistance for GDB", "bold"))
             # helptext += "For latest update, check peda project page: %s\n" % green("https://github.com/longld/peda/")
-            helptext += "List of \"peda\" subcommands, type the subcommand to invoke it:\n"
-            i = 0
+            helptext.append("List of \"peda\" subcommands, type the subcommand to invoke it:\n")
             for cmd in self.commands:
                 if not cmd.startswith("_"):  # skip internal use commands
                     func = getattr(self, cmd)
-                    helptext += "%s -- %s\n" % (cmd, green(trim(func.__doc__.strip("\n").splitlines()[0])))
-            helptext += '\nType "help" followed by subcommand for full documentation.'
+                    helptext.append("%s -- %s" % (cmd, green(trim(func.__doc__.strip("\n").splitlines()[0]))))
+            helptext.append('\nType "help" followed by subcommand for full documentation.')
         else:
             if cmd in self.commands:
                 func = getattr(self, cmd)
                 lines = trim(func.__doc__).splitlines()
-                helptext += green(lines[0]) + "\n"
+                helptext.append(green(lines[0]))
                 for line in lines[1:]:
                     if "Usage:" in line:
-                        helptext += blue(line) + "\n"
+                        helptext.append(blue(line))
                     else:
-                        helptext += line + "\n"
+                        helptext.append(line)
             else:
                 for c in self.commands:
                     if not c.startswith("_") and cmd in c:
                         func = getattr(self, c)
-                        helptext += "%s -- %s\n" % (c, green(trim(func.__doc__.strip("\n").splitlines()[0])))
+                        helptext.append("%s -- %s" % (c, green(trim(func.__doc__.strip("\n").splitlines()[0]))))
 
-        return helptext
+        return '\n'.join(helptext)
 
     def help(self, *arg):
         """
@@ -3703,7 +3713,7 @@ class PEDACmd(object):
             address = None
 
         if address is None:
-            address = peda.getreg("pc")
+            address = peda.getpc()
 
         if count is None:
             code = peda.disassemble_around(address)
@@ -4028,7 +4038,7 @@ class PEDACmd(object):
             peda.execute("tbreak %s" % address)
         else:
             peda.execute("tbreak *0x%x" % address)
-        pc = peda.getreg("pc")
+        pc = peda.getpc()
         if pc is None:
             peda.execute("run")
         else:
@@ -4051,7 +4061,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        next_code = peda.next_inst(peda.getreg("pc"), count)
+        next_code = peda.next_inst(peda.getpc(), count)
         if not next_code:
             warning("failed to get next instructions")
             return
@@ -4085,7 +4095,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        next_code = peda.next_inst(peda.getreg("pc"), count)
+        next_code = peda.next_inst(peda.getpc(), count)
         if not next_code:
             warning("failed to get next instructions")
             return
@@ -4316,7 +4326,7 @@ class PEDACmd(object):
             # todo special case for JUMP inst
             prev_code = ""
             if re.search("j[^m]", code.split(":\t")[-1].split()[0]):
-                prev_insts = peda.prev_inst(peda.getreg("pc"))
+                prev_insts = peda.prev_inst(peda.getpc())
                 if prev_insts:
                     prev_code = "0x%x:%s" % prev_insts[0]
                     msg("%s%s%s" % (" " * (prev_depth - 1), " dep:%02d    " % (prev_depth - 1), prev_code), teefd=logfd)
@@ -4388,7 +4398,7 @@ class PEDACmd(object):
         binmap = peda.get_vmmap("binary")
         try:
             while count != 0:
-                pc = peda.getreg("pc")
+                pc = peda.getpc()
                 if not peda.is_address(pc):
                     break
                 code = peda.get_disasm(pc)
@@ -4429,7 +4439,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        # pc = peda.getreg("pc")
+        # pc = peda.getpc()
         # display register info
         msg("[%s]" % "REGISTERS".center(self.width, "-"), "blue")
         self.xinfo("register")
@@ -4483,7 +4493,7 @@ class PEDACmd(object):
         if not self._is_running():
             return
 
-        pc = peda.getreg("pc")
+        pc = peda.getpc()
         if peda.is_address(pc):
             inst = peda.get_disasm(pc)
         else:
@@ -4723,7 +4733,7 @@ class PEDACmd(object):
         address = to_int(address)
         end_address = None
         if address is None:
-            address = peda.getreg("pc")
+            address = peda.getpc()
 
         if byte is not None and to_int(data) is not None:
             end_address, data = to_int(data), byte
@@ -5307,7 +5317,7 @@ class PEDACmd(object):
             peda.execute("start")
 
         # set current PC => address, continue
-        pc = peda.getreg("pc")
+        pc = peda.getpc()
         sp = peda.getreg("sp")
         if not address:
             address = sp
@@ -5851,7 +5861,7 @@ class PEDACmd(object):
         if mode not in ('arm', 'aarch64', 'thumb', 'thumb64'):
             self._missing_argument()
 
-        if self._is_running() and address == peda.getreg("pc"):
+        if self._is_running() and address == peda.getpc():
             write_mode = exec_mode = True
 
         line = peda.execute_redirect("show write")
@@ -6217,7 +6227,7 @@ class PEDACmd(object):
         msg("Reason: %s" % red(reason))
 
         # exploitability
-        pc = peda.getreg("pc")
+        pc = peda.getpc()
         if not peda.is_address(pc):
             exp = red("EXPLOITABLE")
         else:
@@ -6323,7 +6333,7 @@ class PEDACmd(object):
             self.plugins[name] = func
             PluginCommand(name)
             info('Plugin %s loaded.' % name)
-            info('Plugin doc:%s' % green(func.__doc__))
+            info('Plugin doc:\n%s' % green(func.__doc__.strip('\n')))
 
     plugin.options = [i[:-10] for i in os.listdir(os.path.dirname(PEDAFILE) + "/plugins/") if i.endswith('-plugin.py')]
 
@@ -6337,13 +6347,17 @@ class PluginCommand(gdb.Command):
     def __init__(self, name):
         self.name = name
         func = pedacmd.plugins.get(self.name)
-        self.__doc__ = func.__doc__
+        self.__doc__ = func.__doc__.strip('\n')
         super(PluginCommand, self).__init__(self.name, gdb.COMMAND_NONE)
 
     def invoke(self, arg_string, from_tty):
         self.dont_repeat()
         arg = peda.string_to_argv(arg_string)
         func = pedacmd.plugins.get(self.name)
+        if func is None:
+            pedacmd.plugins[self.name] = None
+            peda.execute('peda plugin %s reload' % self.name)
+            func = pedacmd.plugins.get(self.name)
         try:
             reset_cache(sys.modules['__main__'])
             func(peda, *arg)

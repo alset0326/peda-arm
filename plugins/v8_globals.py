@@ -80,6 +80,71 @@ kQuietNaNMask = (1 << 64 - 1) & (0xfff << 51)
 kOneByteSize = kCharSize
 kUC16Size = 2
 
+
+# Round up n to be a multiple of sz, where sz is a power of 2.
+def ROUND_UP(n, sz):
+    return (n + (sz - 1)) & ~(sz - 1)
+
+
+# Mask for the sign bit in a smi.
+kSmiSignMask = kIntptrSignBit
+
+kObjectAlignmentBits = kPointerSizeLog2
+kObjectAlignment = 1 << kObjectAlignmentBits
+kObjectAlignmentMask = kObjectAlignment - 1
+
+# Desired alignment for pointers.
+kPointerAlignment = (1 << kPointerSizeLog2)
+kPointerAlignmentMask = kPointerAlignment - 1
+
+# Desired alignment for double values.
+kDoubleAlignment = 8
+kDoubleAlignmentMask = kDoubleAlignment - 1
+
+# Desired alignment for generated code is 32 bytes (to improve cache line
+# utilization).
+kCodeAlignmentBits = 5
+kCodeAlignment = 1 << kCodeAlignmentBits
+kCodeAlignmentMask = kCodeAlignment - 1
+
+# The owner field of a page is tagged with the page header tag. We need that
+# to find out if a slot is part of a large object. If we mask out the lower
+# 0xfffff bits (1M pages), go to the owner offset, and see that this field
+# is tagged with the page header tag, we can just look up the owner.
+# Otherwise, we know that we are somewhere (not within the first 1M) in a
+# large object.
+kPageHeaderTag = 3
+kPageHeaderTagSize = 2
+kPageHeaderTagMask = (1 << kPageHeaderTagSize) - 1
+
+
+# OBJECT_POINTER_ALIGN returns the value aligned as a HeapObject pointer
+def OBJECT_POINTER_ALIGN(value):
+    return (value + kObjectAlignmentMask) & ~kObjectAlignmentMask
+
+
+# POINTER_SIZE_ALIGN returns the value aligned as a pointer.
+def POINTER_SIZE_ALIGN(value):
+    return (value + kPointerAlignmentMask) & ~kPointerAlignmentMask
+
+
+# CODE_POINTER_ALIGN returns the value aligned as a generated code segment.
+def CODE_POINTER_ALIGN(value):
+    return (value + kCodeAlignmentMask) & ~kCodeAlignmentMask
+
+
+# Smi constants for 32-bit systems.
+kSmiShiftSize = 0
+kSmiValueSize = 31
+
+# Instance size sentinel for objects of variable size.
+kVariableSizeSentinel = 0
+
+# We may store the unsigned bit field as signed Smi value and do not
+# use the sign bit.
+kStubMajorKeyBits = 7
+kStubMinorKeyBits = kSmiValueSize - kStubMajorKeyBits - 1
+
 # We use the full 8 bits of the instance_type field to encode heap object
 # instance types.  The high-order bit (bit 7) is set if the object is not a
 # string, and cleared if it is a string.
@@ -281,3 +346,145 @@ class InstanceType:
     # Note that the types for which typeof is "function" are not continuous.
     # Define this so that we can put assertions on discrete checks.
     NUM_OF_CALLABLE_SPEC_OBJECT_TYPES = 2
+
+
+class ElementsKind:
+    """
+    enum ElementsKind {
+      // The "fast" kind for elements that only contain SMI values. Must be first
+      // to make it possible to efficiently check maps for this kind.
+      FAST_SMI_ELEMENTS,
+      FAST_HOLEY_SMI_ELEMENTS,
+
+      // The "fast" kind for tagged values. Must be second to make it possible to
+      // efficiently check maps for this and the FAST_SMI_ONLY_ELEMENTS kind
+      // together at once.
+      FAST_ELEMENTS,
+      FAST_HOLEY_ELEMENTS,
+
+      // The "fast" kind for unwrapped, non-tagged double values.
+      FAST_DOUBLE_ELEMENTS,
+      FAST_HOLEY_DOUBLE_ELEMENTS,
+
+      // The "slow" kind.
+      DICTIONARY_ELEMENTS,
+      SLOPPY_ARGUMENTS_ELEMENTS,
+      // The "fast" kind for external arrays
+      EXTERNAL_INT8_ELEMENTS,
+      EXTERNAL_UINT8_ELEMENTS,
+      EXTERNAL_INT16_ELEMENTS,
+      EXTERNAL_UINT16_ELEMENTS,
+      EXTERNAL_INT32_ELEMENTS,
+      EXTERNAL_UINT32_ELEMENTS,
+      EXTERNAL_FLOAT32_ELEMENTS,
+      EXTERNAL_FLOAT64_ELEMENTS,
+      EXTERNAL_UINT8_CLAMPED_ELEMENTS,
+
+      // Fixed typed arrays
+      UINT8_ELEMENTS,
+      INT8_ELEMENTS,
+      UINT16_ELEMENTS,
+      INT16_ELEMENTS,
+      UINT32_ELEMENTS,
+      INT32_ELEMENTS,
+      FLOAT32_ELEMENTS,
+      FLOAT64_ELEMENTS,
+      UINT8_CLAMPED_ELEMENTS,
+
+      // Derived constants from ElementsKind
+      FIRST_ELEMENTS_KIND = FAST_SMI_ELEMENTS,
+      LAST_ELEMENTS_KIND = UINT8_CLAMPED_ELEMENTS,
+      FIRST_FAST_ELEMENTS_KIND = FAST_SMI_ELEMENTS,
+      LAST_FAST_ELEMENTS_KIND = FAST_HOLEY_DOUBLE_ELEMENTS,
+      FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_INT8_ELEMENTS,
+      LAST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_UINT8_CLAMPED_ELEMENTS,
+      FIRST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = UINT8_ELEMENTS,
+      LAST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = UINT8_CLAMPED_ELEMENTS,
+      TERMINAL_FAST_ELEMENTS_KIND = FAST_HOLEY_ELEMENTS
+    };
+    """
+
+    FAST_SMI_ELEMENTS, \
+    FAST_HOLEY_SMI_ELEMENTS, \
+ \
+    FAST_ELEMENTS, \
+    FAST_HOLEY_ELEMENTS, \
+ \
+    FAST_DOUBLE_ELEMENTS, \
+    FAST_HOLEY_DOUBLE_ELEMENTS, \
+ \
+    DICTIONARY_ELEMENTS, \
+    SLOPPY_ARGUMENTS_ELEMENTS, \
+ \
+    EXTERNAL_INT8_ELEMENTS, \
+    EXTERNAL_UINT8_ELEMENTS, \
+    EXTERNAL_INT16_ELEMENTS, \
+    EXTERNAL_UINT16_ELEMENTS, \
+    EXTERNAL_INT32_ELEMENTS, \
+    EXTERNAL_UINT32_ELEMENTS, \
+    EXTERNAL_FLOAT32_ELEMENTS, \
+    EXTERNAL_FLOAT64_ELEMENTS, \
+    EXTERNAL_UINT8_CLAMPED_ELEMENTS, \
+ \
+    UINT8_ELEMENTS, \
+    INT8_ELEMENTS, \
+    UINT16_ELEMENTS, \
+    INT16_ELEMENTS, \
+    UINT32_ELEMENTS, \
+    INT32_ELEMENTS, \
+    FLOAT32_ELEMENTS, \
+    FLOAT64_ELEMENTS, \
+    UINT8_CLAMPED_ELEMENTS = range(26)
+
+    FIRST_ELEMENTS_KIND = FAST_SMI_ELEMENTS
+    LAST_ELEMENTS_KIND = UINT8_CLAMPED_ELEMENTS
+    FIRST_FAST_ELEMENTS_KIND = FAST_SMI_ELEMENTS
+    LAST_FAST_ELEMENTS_KIND = FAST_HOLEY_DOUBLE_ELEMENTS
+    FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_INT8_ELEMENTS
+    LAST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_UINT8_CLAMPED_ELEMENTS
+    FIRST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = UINT8_ELEMENTS
+    LAST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = UINT8_CLAMPED_ELEMENTS
+    TERMINAL_FAST_ELEMENTS_KIND = FAST_HOLEY_ELEMENTS
+
+
+kElementsKindCount = ElementsKind.LAST_ELEMENTS_KIND - ElementsKind.FIRST_ELEMENTS_KIND + 1
+kFastElementsKindCount = ElementsKind.LAST_FAST_ELEMENTS_KIND - ElementsKind.FIRST_FAST_ELEMENTS_KIND + 1
+
+# The number to add to a packed elements kind to reach a holey elements kind
+kFastElementsKindPackedToHoley = ElementsKind.FAST_HOLEY_SMI_ELEMENTS - ElementsKind.FAST_SMI_ELEMENTS
+
+# src/property-details.h
+kDescriptorIndexBitCount = 10
+# The maximum number of descriptors we want in a descriptor array (should
+# fit in a page).
+kMaxNumberOfDescriptors = (1 << kDescriptorIndexBitCount) - 2
+kInvalidEnumCacheSentinel = (1 << kDescriptorIndexBitCount) - 1
+
+# v8::ArrayBuffer::kInternalFieldCount
+kInternalFieldCount = 2
+
+
+# V8_BASE_MACROS_H_
+
+# Compute the 0-relative offset of some absolute value x of type T.
+# This allows conversion of Addresses and integral types into
+# 0-relative int offsets.
+def OffsetFrom(x):
+    return x(0)
+
+
+# Compute the absolute value of type T for some 0-relative offset x.
+# This allows conversion of 0-relative int offsets into Addresses and
+# integral types.
+def AddressFrom(x):
+    return 0 + x
+
+
+# Return the largest multiple of m which is <= x.
+def RoundDown(x, m):
+    return AddressFrom(OffsetFrom(x) & -m)
+
+
+# Return the smallest multiple of m which is >= x.
+def RoundUp(x, m):
+    return RoundDown((x + m - 1), m)
