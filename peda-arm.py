@@ -805,21 +805,20 @@ class PEDA(object):
         Returns:
             - list of tuple (address(Int), code(String))
         """
+        disassemble = gdb.selected_frame().architecture().disassemble
         result = []
-        backward = 64 + 16 * count
-        for i in range(backward):
+        backward = 4 + 4 * count
+        for i in range(64):
             # tode
-            if self.getpid() and not self.is_address(address - backward + i):
+            if self.getpid() and not self.is_address(address - backward - i):
                 continue
 
-            codes = gdb.selected_frame().architecture().disassemble(address - backward + i, address + 1)
-            for code in codes[::-1]:
-                if code.get('addr') == address:
-                    if len(codes) <= count:
-                        break
-                    for code2 in codes[-count - 1:-1]:
-                        result.append((code2.get('addr'), code2.get('asm')))
-                    return result
+            codes = disassemble(address - backward - i, address)
+            if codes[-1].get('addr') != address or len(codes) <= count:
+                continue
+            for code in codes[-count - 1:-1]:
+                result.append((code.get('addr'), code.get('asm')))
+            return result
         return None
 
     @memoized
