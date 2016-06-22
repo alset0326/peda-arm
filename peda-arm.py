@@ -808,18 +808,14 @@ class PEDA(object):
         disassemble = gdb.selected_frame().architecture().disassemble
         result = []
         backward = 4 + 4 * count
-        for i in range(64):
-            # tode
-            if self.getpid() and not self.is_address(address - backward - i):
-                continue
-
-            codes = disassemble(address - backward - i, address)
-            if codes[-1].get('addr') != address or len(codes) <= count:
-                continue
-            for code in codes[-count - 1:-1]:
-                result.append((code.get('addr'), code.get('asm')))
-            return result
-        return None
+        if self.getpid() and not self.is_address(address - backward):
+            return None
+        codes = disassemble(address - backward, address)
+        if codes[-1].get('addr') != address or len(codes) <= count:
+            return None
+        for code in codes[-count - 1:-1]:
+            result.append((code.get('addr'), code.get('asm')))
+        return result
 
     @memoized
     def current_inst(self, address):
