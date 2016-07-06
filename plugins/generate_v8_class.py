@@ -1,6 +1,9 @@
 source = '''
-// The JSWeakSet describes EcmaScript Harmony weak sets
-class JSWeakSet: public JSWeakCollection {
+class AllocationMemento: public Struct {
+ public:
+  static const int kAllocationSiteOffset = HeapObject::kHeaderSize;
+  static const int kSize = kAllocationSiteOffset + kPointerSize;
+
 '''
 
 if '=\n' in source:

@@ -24,9 +24,7 @@
          - JSFunction
          - JSGeneratorObject
          - JSModule
-         - GlobalObject
-           - JSGlobalObject
-           - JSBuiltinsObject
+         - JSGlobalObject
          - JSGlobalProxy
          - JSValue
            - JSDate
@@ -35,8 +33,11 @@
          - JSFunctionProxy
      - FixedArrayBase
        - ByteArray
+       - BytecodeArray
        - FixedArray
          - DescriptorArray
+         - LiteralsArray
+         - BindingsArray
          - HashTable
            - Dictionary
            - StringTable
@@ -47,20 +48,13 @@
            - OrderedHashSet
            - OrderedHashMap
          - Context
+         - TypeFeedbackMetadata
          - TypeFeedbackVector
-         - JSFunctionResultCache
          - ScopeInfo
          - TransitionArray
+         - ScriptContextTable
+         - WeakFixedArray
        - FixedDoubleArray
-       - ExternalArray
-         - ExternalUint8ClampedArray
-         - ExternalInt8Array
-         - ExternalUint8Array
-         - ExternalInt16Array
-         - ExternalUint16Array
-         - ExternalInt32Array
-         - ExternalUint32Array
-         - ExternalFloat32Array
      - Name
        - String
          - SeqString
@@ -81,8 +75,19 @@
              - ExternalTwoByteInternalizedString
        - Symbol
      - HeapNumber
+     - Simd128Value
+       - Float32x4
+       - Int32x4
+       - Uint32x4
+       - Bool32x4
+       - Int16x8
+       - Uint16x8
+       - Bool16x8
+       - Int8x16
+       - Uint8x16
+       - Bool8x16
      - Cell
-       - PropertyCell
+     - PropertyCell
      - Code
      - Map
      - Oddball
@@ -90,9 +95,7 @@
      - SharedFunctionInfo
      - Struct
        - Box
-       - DeclaredAccessorDescriptor
        - AccessorInfo
-         - DeclaredAccessorInfo
          - ExecutableAccessorInfo
        - AccessorPair
        - AccessCheckInfo
@@ -102,11 +105,12 @@
          - FunctionTemplateInfo
          - ObjectTemplateInfo
        - Script
-       - SignatureInfo
        - TypeSwitchInfo
        - DebugInfo
        - BreakPointInfo
        - CodeCache
+       - PrototypeInfo
+     - WeakCell
 
  Formats of Object*:
   Smi:        [31 bit signed int] 0
@@ -117,7 +121,7 @@ import struct
 import config
 import traceback
 from utils import *
-from v8_globals_44_0_2403_119 import *
+from v8_globals_48_0_2564_8 import *
 
 
 def has_smi_tag(v):
@@ -172,31 +176,31 @@ def decode_v8_value(v, bitness=32):
         return base_str
 
 
-def to_dword(data, num=1):
+def to_dword(data, num=1, unpack=True):
     result = struct.unpack('<' + 'I' * num, data)
-    return result[0] if num == 1 else result
+    return result[0] if unpack is True and num == 1 else result
 
 
-def to_byte(data, num=1):
+def to_byte(data, num=1, unpack=True):
     result = struct.unpack('<' + 'B' * num, data)
-    return result[0] if num == 1 else result
+    return result[0] if unpack is True and num == 1 else result
 
 
-def to_double(data, num=1):
+def to_double(data, num=1, unpack=True):
     result = struct.unpack('<' + 'd' * num, data)
-    return result[0] if num == 1 else result
+    return result[0] if unpack is True and num == 1 else result
 
 
 def to_boolean(value, bit_position):
     return (value & (1 << bit_position)) != 0
 
 
-def read_mem(addr, size):
+def read_mem(addr, size=kPointerSize):
     """
     Read memory using peda
     Args:
         addr: (int)
-        size: (int)
+        size: size in byte (int)
 
     Returns: data (str)
 
@@ -204,7 +208,7 @@ def read_mem(addr, size):
     return peda.readmem(addr, size)
 
 
-def read(data, offset, size=kPointerSize):
+def read(data, offset=0, size=kPointerSize):
     """
     Slice data using stream style
     Args:
@@ -219,15 +223,15 @@ def read(data, offset, size=kPointerSize):
     return data[offset:end]
 
 
-def get_dword_smi(data, offset):
+def get_dword_smi(data, offset=0):
     return smi_to_int(to_dword(read(data, offset)))
 
 
-def get_dword(data, offset):
+def get_dword(data, offset=0):
     return to_dword(read(data, offset))
 
 
-def get_byte(data, offset):
+def get_byte(data, offset=0):
     return to_byte(read(data, offset, 1))
 
 
@@ -290,6 +294,9 @@ class Object:
     def update_size(self, size):
         if self.size < size:
             self.data = self.handle.data(size)
+            if not self.data:
+                warning('Got invalid heap object size.')
+                raise RuntimeError
             self.size = size
 
     def increase_size(self, size):
@@ -356,18 +363,18 @@ class HeapObject(Object):
             return SeqOneByteString.kHeaderSize + kCharSize * SeqOneByteString.get_length(data)
         if instance_type == InstanceType.BYTE_ARRAY_TYPE:
             return ByteArray.kHeaderSize + ByteArray.get_length(data)
+        if instance_type == InstanceType.BYTECODE_ARRAY_TYPE:
+            # todo to add
+            return 4
         if instance_type == InstanceType.FREE_SPACE_TYPE:
             return FreeSpace.get_size(data)
         if instance_type == InstanceType.STRING_TYPE or instance_type == InstanceType.INTERNALIZED_STRING_TYPE:
             return SeqTwoByteString.kHeaderSize + kShortSize * SeqTwoByteString.get_length(data)
         if instance_type == InstanceType.FIXED_DOUBLE_ARRAY_TYPE:
             return FixedDoubleArray.kHeaderSize + kDoubleSize * FixedDoubleArray.get_length(data)
-        if instance_type == InstanceType.CONSTANT_POOL_ARRAY_TYPE:
-            # TODO src/objects-inl.h:4288. Add support
-            return ConstantPoolArray.kSize
         if InstanceType.FIRST_FIXED_TYPED_ARRAY_TYPE <= instance_type <= InstanceType.LAST_FIXED_TYPED_ARRAY_TYPE:
             return OBJECT_POINTER_ALIGN(
-                FixedTypedArrayBase.kDataOffset + FixedTypedArrayBase.get_data_size_from_instance(instance_type))
+                FixedTypedArrayBase.kDataOffset + FixedTypedArrayBase.get_data_size_from_instance(data, instance_type))
         return RoundUp(Code.kHeaderSize + Code.get_body_size(data), kCodeAlignment)
 
     def do_parse(self):
@@ -456,18 +463,14 @@ class FixedArray(FixedArrayBase):
         length = FixedArray.get_length(self.data)
         if length == 0:
             return []
-        self.increase_size(4 * length)
-        elements = to_dword(read(self.data, self.kSize, 4 * length), length)
-        if length == 1:
-            elements = [elements]
-        elements = [str(smi_to_int(i)) if has_smi_tag(i) else '0x%x' % i for i in elements]
+        self.increase_size(kPointerSize * length)
+        elements = to_dword(read(self.data, self.kSize, kPointerSize * length), length, False)
         return elements
 
     def do_parse(self):
         FixedArrayBase.do_parse(self)
-        self.append(
-            'ElementsAddr: 0x%x  ==>  [%s]  (Smi casted)' % (
-                self.handle.decode() + self.kSize, ',\t'.join(self.get_elements())))
+        elements = ',\t'.join([str(smi_to_int(i)) if has_smi_tag(i) else '0x%x' % i for i in self.get_elements()])
+        self.append('Elements: (Addr 0x%x)  ==>  [%s]  (Smi casted)' % (self.handle.decode() + self.kSize, elements))
 
 
 class FixedDoubleArray(FixedArrayBase):
@@ -507,190 +510,172 @@ class ByteArray(FixedArrayBase):
     def do_parse(self):
         FixedArrayBase.do_parse(self)
         self.append(
-            'ElementsAddr: 0x%x  ==>  [%s]' % (self.handle.decode() + self.kSize, ',\t'.join(self.get_elements())))
-
-
-class ExternalArray(FixedArrayBase):
-    """
-    class ExternalArray: public FixedArrayBase;
-    An ExternalArray represents a fixed-size array of primitive values
-    which live outside the JavaScript heap. Its subclasses are used to
-    implement the CanvasArray types being defined in the WebGL
-    specification. As of this writing the first public draft is not yet
-    available, but Khronos members can access the draft at:
-      https://cvs.khronos.org/svn/repos/3dweb/trunk/doc/spec/WebGL-spec.html
-
-    The semantics of these arrays differ from CanvasPixelArray.
-    Out-of-range values passed to the setter are converted via a C
-    cast, not clamping. Out-of-range indices cause exceptions to be
-    raised rather than being silently ignored.
-    """
-    kMaxLength = 0x3fffffff
-    kExternalPointerOffset = POINTER_SIZE_ALIGN(FixedArrayBase.kLengthOffset + kPointerSize)
-    kHeaderSize = kExternalPointerOffset + kPointerSize
-    kAlignedSize = OBJECT_POINTER_ALIGN(kHeaderSize)
-    kSize = kHeaderSize  # for mem dump needed
-
-    @staticmethod
-    def get_external_pointer_addr(data):
-        return get_dword(data, ExternalArray.kExternalPointerOffset)
-
-    def do_parse(self):
-        FixedArrayBase.do_parse(self)
-        self.append('kExternalPointerAddr: 0x%x' % ExternalArray.get_external_pointer_addr(self.data))
-
-
-class ExternalUint32Array(ExternalArray):
-    """
-    class ExternalUint32Array: public ExternalArray;
-    """
-
-    def get_elements(self):
-        kExternalPointerAddr = self.get_external_pointer_addr(self.data)
-        kLength = self.get_length(self.data)
-        data = read_mem(kExternalPointerAddr, kLength * kInt32Size)
-        return ['0x%x' % i for i in to_dword(data, kLength)]
-
-    def do_parse(self):
-        ExternalArray.do_parse(self)
-        self.append('Elements at kExternalPointerAddr: [%s]' % ',\t'.join(self.get_elements()))
+            'Elements: (Addr 0x%x)  ==>  [%s]' % (self.handle.decode() + self.kSize, ',\t'.join(self.get_elements())))
 
 
 class FixedTypedArrayBase(FixedArrayBase):
     """
     class FixedTypedArrayBase: public FixedArrayBase;
     """
-    kDataOffset = FixedArrayBase.kHeaderSize
+    kBasePointerOffset = FixedArrayBase.kHeaderSize
+    kExternalPointerOffset = kBasePointerOffset + kPointerSize
+    kHeaderSize = DOUBLE_POINTER_ALIGN(kExternalPointerOffset + kPointerSize)
+    kDataOffset = kHeaderSize
+    kSize = kHeaderSize  # for mem dump needed
 
-    kSize = kDataOffset + kPointerSize  # for memdump
+    # (Type, type, TYPE, C type, element_size)
+    TYPED_ARRAYS = [('Uint8', 'uint8', 'UINT8', 'uint8_t', 1),
+                    ('Int8', 'int8', 'INT8', 'int8_t', 1),
+                    ('Uint16', 'uint16', 'UINT16', 'uint16_t', 2),
+                    ('Int16', 'int16', 'INT16', 'int16_t', 2),
+                    ('Uint32', 'uint32', 'UINT32', 'uint32_t', 4),
+                    ('Int32', 'int32', 'INT32', 'int32_t', 4),
+                    ('Float32', 'float32', 'FLOAT32', 'float', 4),
+                    ('Float64', 'float64', 'FLOAT64', 'double', 8),
+                    ('Uint8Clamped', 'uint8_clamped', 'UINT8_CLAMPED', 'uint8_t', 1)]
 
     @staticmethod
-    def get_data_addr(data):
-        return get_dword(data, FixedTypedArrayBase.kDataOffset)
+    def get_base_pointer_addr(data):
+        return get_dword(data, FixedTypedArrayBase.kBasePointerOffset)
 
     @staticmethod
-    def get_data_size_from_instance(instance_type_num):
+    def get_external_pointer_addr(data):
+        return get_dword(data, FixedTypedArrayBase.kExternalPointerOffset)
+
+    @staticmethod
+    def get_data_ptr(data):
+        return FixedTypedArrayBase.get_base_pointer_addr(data) + FixedTypedArrayBase.get_external_pointer_addr(data)
+
+    @staticmethod
+    def get_element_size_from_instance(instance_type_num):
+        instance_type_name = get_instance_type_name(instance_type_num)
+        for i in FixedTypedArrayBase.TYPED_ARRAYS:
+            if 'FIXED_%s_ARRAY_TYPE' % i[2] in instance_type_name:
+                return i[-1]
         return 0
+
+    @staticmethod
+    def get_data_size_from_instance(data, instance_type_num):
+        element_size = FixedTypedArrayBase.get_element_size_from_instance(instance_type_num)
+        return FixedArrayBase.get_length(data) * element_size
 
     def do_parse(self):
         FixedArrayBase.do_parse(self)
-        self.append('kDataAddr: 0x%x' % FixedTypedArrayBase.get_data_addr(self.data))
+        self.append('kBasePointerAddr: 0x%x' % FixedTypedArrayBase.get_base_pointer_addr(self.data))
+        self.append('kExternalPointerAddr: 0x%x' % FixedTypedArrayBase.get_external_pointer_addr(self.data))
 
 
-class ConstantPoolArray(HeapObject):
+class FixedTypedArray(FixedTypedArrayBase):
     """
-    class ConstantPoolArray: public HeapObject;
-    ConstantPoolArray describes a fixed-sized array containing constant pool
-    entries.
-
-    A ConstantPoolArray can be structured in two different ways depending upon
-    whether it is extended or small. The is_extended_layout() method can be used
-    to discover which layout the constant pool has.
-
-    The format of a small constant pool is:
-      [kSmallLayout1Offset]                    : Small section layout bitmap 1
-      [kSmallLayout2Offset]                    : Small section layout bitmap 2
-      [first_index(INT64, SMALL_SECTION)]      : 64 bit entries
-       ...                                     :  ...
-      [first_index(CODE_PTR, SMALL_SECTION)]   : code pointer entries
-       ...                                     :  ...
-      [first_index(HEAP_PTR, SMALL_SECTION)]   : heap pointer entries
-       ...                                     :  ...
-      [first_index(INT32, SMALL_SECTION)]      : 32 bit entries
-       ...                                     :  ...
-
-    If the constant pool has an extended layout, the extended section constant
-    pool also contains an extended section, which has the following format at
-    location get_extended_section_header_offset():
-      [kExtendedInt64CountOffset]              : count of extended 64 bit entries
-      [kExtendedCodePtrCountOffset]            : count of extended code pointers
-      [kExtendedHeapPtrCountOffset]            : count of extended heap pointers
-      [kExtendedInt32CountOffset]              : count of extended 32 bit entries
-      [first_index(INT64, EXTENDED_SECTION)]   : 64 bit entries
-       ...                                     :  ...
-      [first_index(CODE_PTR, EXTENDED_SECTION)]: code pointer entries
-       ...                                     :  ...
-      [first_index(HEAP_PTR, EXTENDED_SECTION)]: heap pointer entries
-       ...                                     :  ...
-      [first_index(INT32, EXTENDED_SECTION)]   : 32 bit entries
-       ...                                     :  ...
-
+    template <class Traits>
+    class FixedTypedArray: public FixedTypedArrayBase;
     """
-    kSmallLayout1Offset = HeapObject.kHeaderSize
-    kSmallLayout2Offset = kSmallLayout1Offset + kInt32Size
-    kHeaderSize = kSmallLayout2Offset + kInt32Size
-    kSize = kHeaderSize  # for mem dump needed
+    ElementType = int
+    kInstanceType = InstanceType.FIXED_UINT8_ARRAY_TYPE
 
-    kFirstEntryOffset = ROUND_UP(kHeaderSize, kInt64Size)
-    kSmallLayoutCountBits = 10
-    kMaxSmallEntriesPerType = (1 << kSmallLayoutCountBits) - 1
-    # Extended layout description, which starts at get_extended_section_header_offset().
-    # TODO: add support above
-    kExtendedInt64CountOffset = 0
-    kExtendedCodePtrCountOffset = kExtendedInt64CountOffset + kPointerSize
-    kExtendedHeapPtrCountOffset = kExtendedCodePtrCountOffset + kPointerSize
-    kExtendedInt32CountOffset = kExtendedHeapPtrCountOffset + kPointerSize
-    kExtendedFirstOffset = kExtendedInt32CountOffset + kPointerSize
+    def get_scalars(self):
+        """
+        Get scalar of this FixedTypedArray
+        Returns:
+            Scalars: [self.ElementType ..] not str!
+        """
+        length = self.get_length(self.data)
+        element_size = self.get_element_size_from_instance(self.kInstanceType)
+        data_ptr = self.get_data_ptr(self.data)
+        data = read_mem(data_ptr, length * element_size)
+        if data == None:
+            return []
 
-    @staticmethod
-    def get_small_layout_1_addr(data):
-        return get_dword(data, ConstantPoolArray.kSmallLayout1Offset)
+        pfs = {8: 'B', 16: 'H', 32: 'I', 64: 'Q'}[8 * element_size]
+        elements = struct.unpack('<' + pfs * length, data)
 
-    @staticmethod
-    def get_small_layout_2_addr(data):
-        return get_dword(data, ConstantPoolArray.kSmallLayout2Offset)
-
-    @staticmethod
-    def get_first_entry_addr(data):
-        return get_dword(data, ConstantPoolArray.kFirstEntryOffset)
-
-    @staticmethod
-    def get_extended_int_6_4_count_addr(data):
-        return get_dword(data, ConstantPoolArray.kExtendedInt64CountOffset)
-
-    @staticmethod
-    def get_extended_code_ptr_count_addr(data):
-        return get_dword(data, ConstantPoolArray.kExtendedCodePtrCountOffset)
-
-    @staticmethod
-    def get_extended_heap_ptr_count_addr(data):
-        return get_dword(data, ConstantPoolArray.kExtendedHeapPtrCountOffset)
-
-    @staticmethod
-    def get_extended_int_3_2_count_addr(data):
-        return get_dword(data, ConstantPoolArray.kExtendedInt32CountOffset)
-
-    @staticmethod
-    def get_extended_first_addr(data):
-        return get_dword(data, ConstantPoolArray.kExtendedFirstOffset)
+        return [self.ElementType(i) for i in elements]
 
     def do_parse(self):
-        HeapObject.do_parse(self)
-        self.append('kSmallLayout1Addr: 0x%x' % ConstantPoolArray.get_small_layout_1_addr(self.data))
-        self.append('kSmallLayout2Addr: 0x%x' % ConstantPoolArray.get_small_layout_2_addr(self.data))
-        self.append('[!] Extended layout description not support yet.')
-        # TODO
-        # self.append('kFirstEntryAddr: 0x%x' % ConstantPoolArray.get_first_entry_addr(self.data))
-        # self.append('kExtendedInt64CountAddr: 0x%x' % ConstantPoolArray.get_extended_int_6_4_count_addr(self.data))
-        # self.append('kExtendedCodePtrCountAddr: 0x%x' % ConstantPoolArray.get_extended_code_ptr_count_addr(self.data))
-        # self.append('kExtendedHeapPtrCountAddr: 0x%x' % ConstantPoolArray.get_extended_heap_ptr_count_addr(self.data))
-        # self.append('kExtendedInt32CountAddr: 0x%x' % ConstantPoolArray.get_extended_int_3_2_count_addr(self.data))
-        # self.append('kExtendedFirstAddr: 0x%x' % ConstantPoolArray.get_extended_first_addr(self.data))
+        FixedTypedArrayBase.do_parse(self)
+        scalars = ',\t'.join([str(i) for i in self.get_scalars()])
+        self.append('ScalarsAddr: 0x%x  ==>  [%s]' % (self.get_data_ptr(self.data), scalars))
+
+
+class FixedUint8Array(FixedTypedArray):
+    """
+    FixedTypedArray<Uint8>;
+    """
+    pass
+
+
+class FixedInt8Array(FixedTypedArray):
+    """
+    FixedTypedArray<Int8>;
+    """
+    kInstanceType = InstanceType.FIXED_INT8_ARRAY_TYPE
+
+
+class FixedUint16Array(FixedTypedArray):
+    """
+    FixedTypedArray<Uint16>
+    """
+    kInstanceType = InstanceType.FIXED_UINT16_ARRAY_TYPE
+
+
+class FixedInt16Array(FixedTypedArray):
+    """
+    FixedTypedArray<Int16>;
+    """
+    kInstanceType = InstanceType.FIXED_INT16_ARRAY_TYPE
+
+
+class FixedUint32Array(FixedTypedArray):
+    """
+    FixedTypedArray<Uint32>;
+    """
+    kInstanceType = InstanceType.FIXED_UINT32_ARRAY_TYPE
+
+
+class FixedInt32Array(FixedTypedArray):
+    """
+    FixedTypedArray<Int32>;
+    """
+    kInstanceType = InstanceType.FIXED_INT32_ARRAY_TYPE
+
+
+class FixedFloat32Array(FixedTypedArray):
+    """
+    FixedTypedArray<Float32>;
+    """
+    ElementType = float
+    kInstanceType = InstanceType.FIXED_FLOAT32_ARRAY_TYPE
+
+
+class FixedFloat64Array(FixedTypedArray):
+    """
+    FixedTypedArray<Float64>;
+    """
+    ElementType = float
+    kInstanceType = InstanceType.FIXED_FLOAT64_ARRAY_TYPE
+
+
+class FixedUint8ClampedArray(FixedTypedArray):
+    """
+    FixedTypedArray<Uint8Clamped>
+    """
+    kInstanceType = InstanceType.FIXED_UINT8_CLAMPED_ARRAY_TYPE
 
 
 class FreeSpace(HeapObject):
     """
     class FreeSpace: public HeapObject;
-    FreeSpace represents fixed sized areas of the heap that are not currently in
-    use.  Used by the heap and GC.
+    FreeSpace are fixed-size free memory blocks used by the heap and GC.
+    They look like heap objects (are heap object tagged and have a map) so that
+    the heap remains iterable.  They have a size and a next pointer.
+    The next pointer is the raw address of the next FreeSpace object (or NULL)
+    in the free list.
     """
     # [size]: size of the free space including the header.
     kSizeOffset = HeapObject.kHeaderSize
-    kHeaderSize = kSizeOffset + kPointerSize
+    kNextOffset = POINTER_SIZE_ALIGN(kSizeOffset + kPointerSize)
 
-    kSize = kHeaderSize  # for mem dump needed
-
-    kAlignedSize = OBJECT_POINTER_ALIGN(kHeaderSize)
+    kSize = kNextOffset + kPointerSize  # for mem dump needed
 
     @staticmethod
     def get_size(data):
@@ -707,45 +692,24 @@ class Code(HeapObject):
     Code describes objects with on-the-fly generated machine code.
     """
     kMaxLoopNestingMarker = 6
-    kInstructionSizeOffset = HeapObject.kHeaderSize
-    kRelocationInfoOffset = kInstructionSizeOffset + kIntSize
+    # kConstantPoolSize = FLAG_enable_embedded_constant_pool ? kIntSize: 0
+    kConstantPoolSize = 0
+    kRelocationInfoOffset = HeapObject.kHeaderSize
     kHandlerTableOffset = kRelocationInfoOffset + kPointerSize
     kDeoptimizationDataOffset = kHandlerTableOffset + kPointerSize
     kTypeFeedbackInfoOffset = kDeoptimizationDataOffset + kPointerSize
     kNextCodeLinkOffset = kTypeFeedbackInfoOffset + kPointerSize
     kGCMetadataOffset = kNextCodeLinkOffset + kPointerSize
-    kICAgeOffset = kGCMetadataOffset + kPointerSize
+    kInstructionSizeOffset = kGCMetadataOffset + kPointerSize
+    kICAgeOffset = kInstructionSizeOffset + kIntSize
     kFlagsOffset = kICAgeOffset + kIntSize
     kKindSpecificFlags1Offset = kFlagsOffset + kIntSize
     kKindSpecificFlags2Offset = kKindSpecificFlags1Offset + kIntSize
     kPrologueOffset = kKindSpecificFlags2Offset + kIntSize
-    kConstantPoolOffset = kPrologueOffset + kPointerSize
-    kHeaderPaddingStart = kConstantPoolOffset + kIntSize
+    kConstantPoolOffset = kPrologueOffset + kIntSize
+    kHeaderPaddingStart = kConstantPoolOffset + kConstantPoolSize
     kHeaderSize = (kHeaderPaddingStart + kCodeAlignmentMask) & ~kCodeAlignmentMask
     kSize = kHeaderSize  # for mem dump needed
-
-    kOptimizableOffset = kKindSpecificFlags1Offset
-    kFullCodeFlags = kOptimizableOffset + 1
-    kProfilerTicksOffset = kFullCodeFlags + 1
-    kStackSlotsFirstBit = 0
-    kStackSlotsBitCount = 24
-    kHasFunctionCacheBit = kStackSlotsFirstBit + kStackSlotsBitCount
-    kMarkedForDeoptimizationBit = kHasFunctionCacheBit + 1
-    kWeakStubBit = kMarkedForDeoptimizationBit + 1
-    kInvalidatedWeakStubBit = kWeakStubBit + 1
-    kIsTurbofannedBit = kInvalidatedWeakStubBit + 1
-    kIsCrankshaftedBit = 0
-    kSafepointTableOffsetFirstBit = kIsCrankshaftedBit + 1
-    kSafepointTableOffsetBitCount = 24
-    kArgumentsBits = 16
-    kMaxArguments = (1 << kArgumentsBits) - 1
-
-    # kFlagsNotUsedInLookup = TypeField.kMask | CacheHolderField.kMask
-
-    @staticmethod
-    def get_instruction_size(data):
-        # Int Field
-        return get_dword(data, Code.kInstructionSizeOffset)
 
     @staticmethod
     def get_relocation_info_addr(data):
@@ -772,6 +736,10 @@ class Code(HeapObject):
         return get_dword(data, Code.kGCMetadataOffset)
 
     @staticmethod
+    def get_instruction_size_addr(data):
+        return get_dword(data, Code.kInstructionSizeOffset)
+
+    @staticmethod
     def get_i_c_age_addr(data):
         return get_dword(data, Code.kICAgeOffset)
 
@@ -795,46 +763,21 @@ class Code(HeapObject):
     def get_constant_pool_addr(data):
         return get_dword(data, Code.kConstantPoolOffset)
 
-    @staticmethod
-    def get_optimizable_addr(data):
-        return get_dword(data, Code.kOptimizableOffset)
-
-    @staticmethod
-    def get_profiler_ticks_addr(data):
-        return get_dword(data, Code.kProfilerTicksOffset)
-
-    @staticmethod
-    def get_safepoint_table_offset_first_bit(data):
-        return get_dword(data, Code.kSafepointTableOffsetFirstBit)
-
-    @staticmethod
-    def get_safepoint_table_offset_bit_count(data):
-        return get_dword(data, Code.kSafepointTableOffsetBitCount)
-
-    @staticmethod
-    def get_body_size(data):
-        return RoundUp(Code.get_instruction_size(data), kObjectAlignment)
-
     def do_parse(self):
         HeapObject.do_parse(self)
-        self.append('kInstructionSize: 0x%x' % Code.get_instruction_size(self.data))
         self.append('kRelocationInfoAddr: 0x%x' % Code.get_relocation_info_addr(self.data))
         self.append('kHandlerTableAddr: 0x%x' % Code.get_handler_table_addr(self.data))
         self.append('kDeoptimizationDataAddr: 0x%x' % Code.get_deoptimization_data_addr(self.data))
         self.append('kTypeFeedbackInfoAddr: 0x%x' % Code.get_type_feedback_info_addr(self.data))
         self.append('kNextCodeLinkAddr: 0x%x' % Code.get_next_code_link_addr(self.data))
         self.append('kGCMetadataAddr: 0x%x' % Code.get_g_c_metadata_addr(self.data))
+        self.append('kInstructionSizeAddr: 0x%x' % Code.get_instruction_size_addr(self.data))
         self.append('kICAgeAddr: 0x%x' % Code.get_i_c_age_addr(self.data))
-        self.append('kFlags: 0x%x' % Code.get_flags_addr(self.data))
-        self.append('kKindSpecificFlags1: 0x%x' % Code.get_kind_specific_flags_1_addr(self.data))
-        self.append('kKindSpecificFlags2: 0x%x' % Code.get_kind_specific_flags_2_addr(self.data))
-        self.append('kPrologue: 0x%x' % Code.get_prologue_addr(self.data))
+        self.append('kFlagsAddr: 0x%x' % Code.get_flags_addr(self.data))
+        self.append('kKindSpecificFlags1Addr: 0x%x' % Code.get_kind_specific_flags_1_addr(self.data))
+        self.append('kKindSpecificFlags2Addr: 0x%x' % Code.get_kind_specific_flags_2_addr(self.data))
+        self.append('kPrologueAddr: 0x%x' % Code.get_prologue_addr(self.data))
         self.append('kConstantPoolAddr: 0x%x' % Code.get_constant_pool_addr(self.data))
-        # TODO to modify above
-        # self.append('kOptimizableAddr: 0x%x' % Code.get_optimizable_addr(self.data))
-        # self.append('kProfilerTicksAddr: 0x%x' % Code.get_profiler_ticks_addr(self.data))
-        # self.append('kSafepointTableOffsetFirstBit: 0x%x' % Code.get_safepoint_table_offset_first_bit(self.data))
-        # self.append('kSafepointTableOffsetBitCount: 0x%x' % Code.get_safepoint_table_offset_bit_count(self.data))
 
 
 class Map(HeapObject):
@@ -849,16 +792,18 @@ class Map(HeapObject):
     kInstanceAttributesOffset = kInstanceSizesOffset + kIntSize
     kBitField3Offset = kInstanceAttributesOffset + kIntSize
     kPrototypeOffset = kBitField3Offset + kPointerSize
-    kConstructorOffset = kPrototypeOffset + kPointerSize
+    kConstructorOrBackPointerOffset = kPrototypeOffset + kPointerSize
     # Storage for the transition array is overloaded to directly contain a back
     # pointer if unused. When the map has transitions, the back pointer is
     # transferred to the transition array and accessed through an extra
     # indirection.
-    kTransitionsOrBackPointerOffset = kConstructorOffset + kPointerSize
-    kDescriptorsOffset = kTransitionsOrBackPointerOffset + kPointerSize
+    kTransitionsOrPrototypeInfoOffset = kConstructorOrBackPointerOffset + kPointerSize
+    kDescriptorsOffset = kTransitionsOrPrototypeInfoOffset + kPointerSize
+    kLayoutDecriptorOffset = 1
     kCodeCacheOffset = kDescriptorsOffset + kPointerSize
     kDependentCodeOffset = kCodeCacheOffset + kPointerSize
-    kSize = kDependentCodeOffset + kPointerSize
+    kWeakCellCacheOffset = kDependentCodeOffset + kPointerSize
+    kSize = kWeakCellCacheOffset + kPointerSize
 
     kProtoTransitionHeaderSize = 1
     kProtoTransitionNumberOfEntriesOffset = 0
@@ -882,10 +827,10 @@ class Map(HeapObject):
 
     # Byte offsets within kInstanceSizesOffset.
     kInstanceSizeOffset = kInstanceSizesOffset + 0
-    kInObjectPropertiesByte = 1
-    kInObjectPropertiesOffset = kInstanceSizesOffset + kInObjectPropertiesByte
-    kPreAllocatedPropertyFieldsByte = 2
-    kPreAllocatedPropertyFieldsOffset = kInstanceSizesOffset + kPreAllocatedPropertyFieldsByte
+    kInObjectPropertiesOrConstructorFunctionIndexByte = 1
+    kInObjectPropertiesOrConstructorFunctionIndexOffset = kInstanceSizesOffset + kInObjectPropertiesOrConstructorFunctionIndexByte
+    kUnusedByte = 2
+    kUnusedOffset = kInstanceSizesOffset + kUnusedByte
     kVisitorIdByte = 3
     kVisitorIdOffset = kInstanceSizesOffset + kVisitorIdByte
 
@@ -902,20 +847,21 @@ class Map(HeapObject):
     # endif
     kInstanceTypeAndBitFieldOffset = kInstanceAttributesOffset + 0
     kBitField2Offset = kInstanceAttributesOffset + 2
+    kUnusedPropertyFieldsByte = 3
     kUnusedPropertyFieldsOffset = kInstanceAttributesOffset + 3
 
     # Bit positions for bit field.
     kHasNonInstancePrototype = 0
-    kIsHiddenPrototype = 1
+    kIsCallable = 1
     kHasNamedInterceptor = 2
     kHasIndexedInterceptor = 3
     kIsUndetectable = 4
     kIsObserved = 5
     kIsAccessCheckNeeded = 6
+    kIsConstructor = 7
 
     # Bit positions for bit field 2
     kIsExtensible = 0
-    kStringWrapperSafeForDefaultValueOf = 1
 
     # Derived values from bit field 2
     ElementsKindBits_kShift = 3
@@ -935,12 +881,12 @@ class Map(HeapObject):
         return get_byte(data, Map.kInstanceSizeOffset) << kPointerSizeLog2
 
     @staticmethod
-    def get_in_object_properties(data):
-        return get_byte(data, Map.kInObjectPropertiesOffset)
+    def get_in_object_properties_or_constructor_function_index(data):
+        return get_byte(data, Map.kInObjectPropertiesOrConstructorFunctionIndexOffset)
 
     @staticmethod
-    def get_pre_allocated_property_fields(data):
-        return get_byte(data, Map.kPreAllocatedPropertyFieldsOffset)
+    def get_unused_offset_in_instance_sizes(data):
+        return get_byte(data, Map.kUnusedOffset)
 
     @staticmethod
     def get_visitor_id(data):
@@ -983,8 +929,8 @@ class Map(HeapObject):
     # Tells whether the instance with this map should be ignored by the
     # Object.getPrototypeOf() function and the __proto__ accessor.
     @staticmethod
-    def is_hidden_prototype(data):
-        return ((1 << Map.kIsHiddenPrototype) & Map.get_bit_field(data)) != 0
+    def is_callable(data):
+        return ((1 << Map.kIsCallable) & Map.get_bit_field(data)) != 0
 
     # Records and queries whether the instance has a named interceptor.
     @staticmethod
@@ -1016,9 +962,8 @@ class Map(HeapObject):
         return ((1 << Map.kIsAccessCheckNeeded) & Map.get_bit_field(data)) != 0
 
     @staticmethod
-    @BitField(7)
-    def is_function_with_prototype(data):
-        return Map.get_bit_field(data)
+    def is_constructor(data):
+        return ((1 << Map.kIsConstructor) & Map.get_bit_field(data)) != 0
 
     # ------       Handle BitField2       ---------
     @staticmethod
@@ -1029,10 +974,7 @@ class Map(HeapObject):
     def is_extensible(data):
         return ((1 << Map.kIsExtensible) & Map.get_bit_field2(data)) != 0
 
-    # Not found in v8 src
-    @staticmethod
-    def is_string_wrapper_safe_for_default_value_of(data):
-        return ((1 << Map.kStringWrapperSafeForDefaultValueOf) & Map.get_bit_field2(data)) != 0
+    #  Bit 1 is free.
 
     @staticmethod
     @BitField(2)
@@ -1048,6 +990,10 @@ class Map(HeapObject):
     def get_elements_kind_name(data):
         kind_num = Map.get_elements_kind(data)
         return get_elements_kind_name(kind_num)
+
+    @staticmethod
+    def get_unused_property_fields(data):
+        return get_byte(data, Map.kUnusedPropertyFieldsOffset)
 
     # ------       Handle BitField3       ---------
     @staticmethod
@@ -1076,7 +1022,7 @@ class Map(HeapObject):
 
     @staticmethod
     @BitField(22)
-    def is_has_instance_call_handler(data):
+    def is_hidden_prototype(data):
         return Map.get_bit_field3(data)
 
     @staticmethod
@@ -1086,28 +1032,33 @@ class Map(HeapObject):
 
     @staticmethod
     @BitField(24)
-    def is_frozen(data):
-        return Map.get_bit_field3(data)
-
-    @staticmethod
-    @BitField(25)
     def is_unstable(data):
         return Map.get_bit_field3(data)
 
     @staticmethod
-    @BitField(26)
+    @BitField(25)
     def is_migration_target(data):
         return Map.get_bit_field3(data)
 
     @staticmethod
-    @BitField(27)
-    def is_done_in_object_slack_tracking(data):
+    @BitField(26)
+    def is_strong(data):
         return Map.get_bit_field3(data)
 
+    # Keep this bit field at the very end for better code in
+    # Builtins::kJSConstructStubGeneric stub.
+    # This counter is used for in-object slack tracking and for map aging.
+    # The in-object slack tracking is considered enabled when the counter is
+    # in the range [kSlackTrackingCounterStart, kSlackTrackingCounterEnd].
     @staticmethod
-    @BitField(29, 3)
-    def get_construction_count(data):
+    @BitField(28, 4)
+    def counter(data):
         return Map.get_bit_field3(data)
+
+    kSlackTrackingCounterStart = 14
+    kSlackTrackingCounterEnd = 8
+    kRetainingCounterStart = kSlackTrackingCounterEnd - 1
+    kRetainingCounterEnd = 0
 
     # ------   End of Handle BitFields  ---------
 
@@ -1116,12 +1067,12 @@ class Map(HeapObject):
         return get_dword(data, Map.kPrototypeOffset)
 
     @staticmethod
-    def get_constructor(data):
-        return get_dword(data, Map.kConstructorOffset)
+    def get_constructor_or_back_pointer(data):
+        return get_dword(data, Map.kConstructorOrBackPointerOffset)
 
     @staticmethod
-    def get_transitions_or_back_pointer(data):
-        return get_dword(data, Map.kTransitionsOrBackPointerOffset)
+    def get_transitions_or_prototype_info(data):
+        return get_dword(data, Map.kTransitionsOrPrototypeInfoOffset)
 
     @staticmethod
     def get_descriptors(data):
@@ -1135,86 +1086,91 @@ class Map(HeapObject):
     def get_dependent_code(data):
         return get_dword(data, Map.kDependentCodeOffset)
 
+    @staticmethod
+    def get_weak_cell_cache_addr(data):
+        return get_dword(data, Map.kWeakCellCacheOffset)
+
     def do_parse(self):
         HeapObject.do_parse(self)
         self.append('kInstanceSizes: 0x%x'
                     '\n\tkInstanceSize: 0x%x'
-                    '\n\tkInObjectProperties: 0x%x'
-                    '\n\tkPreAllocatedPropertyFields: 0x%x'
+                    '\n\tkInObjectPropertiesOrConstructorFunctionIndexOffset: 0x%x'
+                    '\n\tkUnusedOffset: 0x%x'
                     '\n\tkVisitorId: 0x%x' %
                     (self.get_instance_sizes(self.data),
                      self.get_instance_size(self.data),
-                     self.get_in_object_properties(self.data),
-                     self.get_pre_allocated_property_fields(self.data),
+                     self.get_in_object_properties_or_constructor_function_index(self.data),
+                     self.get_unused_offset_in_instance_sizes(self.data),
                      self.get_visitor_id(self.data)))
         self.append('kInstanceAttributes: 0x%x'
                     '\n\tkInstanceType: 0x%x (%s)'
                     # BitField
                     '\n\tkBitField: 0x%x'
                     '\n\t\tkHasNonInstancePrototype: 0x%x'
-                    '\n\t\tkIsHiddenPrototype: 0x%x'
+                    '\n\t\tkIsCallable: 0x%x'
                     '\n\t\tkHasNamedInterceptor: 0x%x'
                     '\n\t\tkHasIndexedInterceptor: 0x%x'
                     '\n\t\tkIsUndetectable: 0x%x'
                     '\n\t\tkIsObserved: 0x%x'
                     '\n\t\tkIsAccessCheckNeeded: 0x%x'
-                    '\n\t\tFunctionWithPrototype: 0x%x'
+                    '\n\t\tkIsConstructor: 0x%x'
                     # BitField2
                     '\n\tkBitField2: 0x%x'
                     '\n\t\tkIsExtensible: 0x%x'
-                    '\n\t\tkStringWrapperSafeForDefaultValueOf: 0x%x'
                     '\n\t\tIsPrototypeMap: 0x%x'
                     '\n\t\tElementsKind: 0x%x (%s)'
+                    # kUnusedPropertyFields
+                    '\n\tkUnusedPropertyFields: 0x%x'
                     %
                     (self.get_instance_attributes(self.data),
                      self.get_instance_type(self.data), self.get_instance_type_name(self.data),
                      # BitField
                      self.get_bit_field(self.data),
                      self.has_non_instance_prototype(self.data),
-                     self.is_hidden_prototype(self.data),
+                     self.is_callable(self.data),
                      self.has_named_interceptor(self.data),
                      self.has_indexed_interceptor(self.data),
                      self.is_undetectable(self.data),
                      self.is_observed(self.data),
                      self.is_access_check_needed(self.data),
-                     self.is_function_with_prototype(self.data),
+                     self.is_constructor(self.data),
                      # BitField2
                      self.get_bit_field2(self.data),
                      self.is_extensible(self.data),
-                     self.is_string_wrapper_safe_for_default_value_of(self.data),
                      self.is_prototype_map(self.data),
-                     self.get_elements_kind(self.data), self.get_elements_kind_name(self.data)))
+                     self.get_elements_kind(self.data), self.get_elements_kind_name(self.data),
+                     # kUnusedPropertyFields
+                     self.get_unused_property_fields(self.data)))
         self.append('kBitField3: 0x%x'
                     '\n\tEnumLengthBits: 0x%x'
                     '\n\tNumberOfOwnDescriptorsBits: 0x%x'
                     '\n\tDictionaryMap : 0x%x'
                     '\n\tOwnsDescriptors : 0x%x'
-                    '\n\tHasInstanceCallHandler : 0x%x'
+                    '\n\tHiddenPrototype : 0x%x'
                     '\n\tDeprecated : 0x%x'
-                    '\n\tIsFrozen : 0x%x'
                     '\n\tIsUnstable : 0x%x'
                     '\n\tIsMigrationTarget : 0x%x'
-                    '\n\tDoneInobjectSlackTracking : 0x%x'
-                    '\n\tConstructionCount: 0x%x'
+                    '\n\tIsStrong : 0x%x'
+                    '\n\tCounter: 0x%x'
                     %
                     (self.get_bit_field3(self.data),
                      self.get_enum_length(self.data),
                      self.get_number_of_own_descriptors(self.data),
                      self.is_dictionary_map(self.data),
                      self.is_owns_dexcriptors(self.data),
-                     self.is_has_instance_call_handler(self.data),
+                     self.is_hidden_prototype(self.data),
                      self.is_deprecated(self.data),
-                     self.is_frozen(self.data),
                      self.is_unstable(self.data),
                      self.is_migration_target(self.data),
-                     self.is_done_in_object_slack_tracking(self.data),
-                     self.get_construction_count(self.data)))
+                     self.is_strong(self.data),
+                     self.counter(self.data)))
         self.append('kPrototype: 0x%x' % self.get_prototype(self.data))
-        self.append('kConstructor: 0x%x' % self.get_constructor(self.data))
-        self.append('kTransitionsOrBackPointer: 0x%x' % self.get_transitions_or_back_pointer(self.data))
+        self.append('kConstructorOrBackPointerOffset: 0x%x' % self.get_constructor_or_back_pointer(self.data))
+        self.append('kTransitionsOrPrototypeInfoOffset: 0x%x' % self.get_transitions_or_prototype_info(self.data))
         self.append('kDescriptors: 0x%x' % self.get_descriptors(self.data))
         self.append('kCodeCache: 0x%x' % self.get_code_cache(self.data))
         self.append('kDependentCode: 0x%x' % self.get_dependent_code(self.data))
+        self.append('kWeakCellCache: 0x%x' % self.get_weak_cell_cache_addr(self.data))
 
 
 class Name(HeapObject):
@@ -1367,7 +1323,7 @@ class SeqString(String):
 
     def do_parse(self):
         String.do_parse(self)
-        self.append('StringAddr: 0x%x  ==>  "%s"' % (self.handle.decode() + self.kSize, self.get_string()))
+        self.append('String: (Addr 0x%x)  ==>  "%s"' % (self.handle.decode() + self.kSize, self.get_string()))
 
 
 class SeqOneByteString(SeqString):
@@ -1513,7 +1469,8 @@ class Oddball(HeapObject):
     # Layout description.
     kToStringOffset = HeapObject.kHeaderSize
     kToNumberOffset = kToStringOffset + kPointerSize
-    kKindOffset = kToNumberOffset + kPointerSize
+    kTypeOfOffset = kToNumberOffset + kPointerSize
+    kKindOffset = kTypeOfOffset + kPointerSize
     kSize = kKindOffset + kPointerSize
 
     kFalse = 0
@@ -1546,6 +1503,10 @@ class Oddball(HeapObject):
         return get_dword(data, Oddball.kToNumberOffset)
 
     @staticmethod
+    def get_type_of_addr(data):
+        return get_dword(data, Oddball.kTypeOfOffset)
+
+    @staticmethod
     def get_kind(data):
         return get_dword_smi(data, Oddball.kKindOffset)
 
@@ -1560,6 +1521,7 @@ class Oddball(HeapObject):
         HeapObject.do_parse(self)
         self.append('kToStringAddr: 0x%x' % Oddball.get_to_string_addr(self.data))
         self.append('kToNumberAddr: 0x%x' % Oddball.get_to_number_addr(self.data))
+        self.append('kTypeOfOffset: 0x%x' % Oddball.get_type_of_addr(self.data))
         self.append('kKind: 0x%x (%s)' % (Oddball.get_kind(self.data), Oddball.get_kind_name(self.data)))
 
 
@@ -1579,39 +1541,34 @@ class Cell(HeapObject):
         self.append('kValueAddr: 0x%x' % Cell.get_value_addr(self.data))
 
 
-class PropertyCell(Cell):
+class PropertyCell(HeapObject):
     """
-    class PropertyCell: public Cell;
+    class PropertyCell : public HeapObject;
     """
-    kTypeOffset = Cell.kValueOffset + kPointerSize
-    kDependentCodeOffset = kTypeOffset + kPointerSize
+    kDetailsOffset = HeapObject.kHeaderSize
+    kValueOffset = kDetailsOffset + kPointerSize
+    kDependentCodeOffset = kValueOffset + kPointerSize
     kSize = kDependentCodeOffset + kPointerSize
-
-    kPointerFieldsBeginOffset = Cell.kValueOffset
-    kPointerFieldsEndOffset = kDependentCodeOffset
+    kPointerFieldsBeginOffset = kValueOffset
+    kPointerFieldsEndOffset = kSize
 
     @staticmethod
-    def get_type_addr(data):
-        return get_dword(data, PropertyCell.kTypeOffset)
+    def get_details_addr(data):
+        return get_dword(data, PropertyCell.kDetailsOffset)
+
+    @staticmethod
+    def get_value_addr(data):
+        return get_dword(data, PropertyCell.kValueOffset)
 
     @staticmethod
     def get_dependent_code_addr(data):
         return get_dword(data, PropertyCell.kDependentCodeOffset)
 
-    @staticmethod
-    def get_pointer_fields_begin_addr(data):
-        return get_dword(data, PropertyCell.kPointerFieldsBeginOffset)
-
-    @staticmethod
-    def get_pointer_fields_end_addr(data):
-        return get_dword(data, PropertyCell.kPointerFieldsEndOffset)
-
     def do_parse(self):
-        Cell.do_parse(self)
-        self.append('kTypeAddr: 0x%x' % PropertyCell.get_type_addr(self.data))
+        HeapObject.do_parse(self)
+        self.append('kDetailsAddr: 0x%x' % PropertyCell.get_details_addr(self.data))
+        self.append('kValueAddr: 0x%x' % PropertyCell.get_value_addr(self.data))
         self.append('kDependentCodeAddr: 0x%x' % PropertyCell.get_dependent_code_addr(self.data))
-        self.append('kPointerFieldsBeginAddr: 0x%x' % PropertyCell.get_pointer_fields_begin_addr(self.data))
-        self.append('kPointerFieldsEndAddr: 0x%x' % PropertyCell.get_pointer_fields_end_addr(self.data))
 
 
 class JSReceiver(HeapObject):
@@ -1655,10 +1612,6 @@ class JSObject(JSReceiver):
     # don't want to be wasteful with long lived objects.
     kMaxUncheckedOldFastElementsLength = 500
 
-    # Note that Page::kMaxRegularHeapObjectSize puts a limit on
-    # permissible values (see the DCHECK in heap.cc).
-    kInitialMaxFastElementArray = 100000
-
     # This constant applies only to the initial map of "$Object" aka
     # "global.Object" and not to arbitrary other JSObject maps.
     kInitialGlobalObjectUnusedPropertiesCount = 4
@@ -1684,7 +1637,7 @@ class JSObject(JSReceiver):
         size = HeapObject.get_object_size(data)
         map_addr = HeapObject.get_map_addr(data)
         map_object = Map(Handle(map_addr))
-        in_object_properties = map_object.get_in_object_properties(map_object.data)
+        in_object_properties = map_object.get_in_object_properties_or_constructor_function_index(map_object.data)
         return ((size - JSObject.get_header_size(data)) >> kPointerSizeLog2) - in_object_properties
 
     @staticmethod
@@ -1741,7 +1694,8 @@ class JSObject(JSReceiver):
         if field_count is None:
             field_count = self.get_internal_field_count(self.data)
         self.increase_size(field_count * kPointerSize)
-        return to_dword(read(self.data, JSObject.get_header_size(self.data), field_count * kPointerSize), field_count)
+        return to_dword(read(self.data, JSObject.get_header_size(self.data), field_count * kPointerSize), field_count,
+                        False)
 
     def parse(self):
         """
@@ -1751,8 +1705,9 @@ class JSObject(JSReceiver):
         """
         self.do_parse()
         field_count = self.get_internal_field_count(self.data)
-        internal_fields_str = '\n\t'.join(
-            ['%d:\t0x%x' % (index, value) for index, value in enumerate(self.get_internal_fields(field_count))])
+        internal_fields = ['%d:\t0x%x' % (index, value) for index, value in
+                           enumerate(self.get_internal_fields(field_count))]
+        internal_fields_str = '\n\t'.join(internal_fields)
         self.append('InternalFields (Count: %d, Size: 0x%x)\n\t%s' %
                     (field_count, field_count * kPointerSize, internal_fields_str))
         return self.result
@@ -1768,24 +1723,14 @@ class JSFunction(JSObject):
     class JSFunction: public JSObject;
     JSFunction describes JavaScript functions.
     """
-    kCodeEntryOffset = JSObject.kHeaderSize
-    kPrototypeOrInitialMapOffset = kCodeEntryOffset + kPointerSize
+    kPrototypeOrInitialMapOffset = JSObject.kHeaderSize
     kSharedFunctionInfoOffset = kPrototypeOrInitialMapOffset + kPointerSize
     kContextOffset = kSharedFunctionInfoOffset + kPointerSize
     kLiteralsOffset = kContextOffset + kPointerSize
     kNonWeakFieldsEndOffset = kLiteralsOffset + kPointerSize
-    kNextFunctionLinkOffset = kNonWeakFieldsEndOffset
+    kCodeEntryOffset = kNonWeakFieldsEndOffset
+    kNextFunctionLinkOffset = kCodeEntryOffset + kPointerSize
     kSize = kNextFunctionLinkOffset + kPointerSize
-
-    kLiteralsPrefixSize = 1
-    kLiteralNativeContextIndex = 0
-    kBoundFunctionIndex = 0
-    kBoundThisIndex = 1
-    kBoundArgumentsStartIndex = 2
-
-    @staticmethod
-    def get_code_entry_addr(data):
-        return get_dword(data, JSFunction.kCodeEntryOffset)
 
     @staticmethod
     def get_prototype_or_initial_map_addr(data):
@@ -1808,17 +1753,21 @@ class JSFunction(JSObject):
         return get_dword(data, JSFunction.kNonWeakFieldsEndOffset)
 
     @staticmethod
+    def get_code_entry_addr(data):
+        return get_dword(data, JSFunction.kCodeEntryOffset)
+
+    @staticmethod
     def get_next_function_link_addr(data):
         return get_dword(data, JSFunction.kNextFunctionLinkOffset)
 
     def do_parse(self):
         JSObject.do_parse(self)
-        self.append('kCodeEntryAddr: 0x%x' % JSFunction.get_code_entry_addr(self.data))
         self.append('kPrototypeOrInitialMapAddr: 0x%x' % JSFunction.get_prototype_or_initial_map_addr(self.data))
         self.append('kSharedFunctionInfoAddr: 0x%x' % JSFunction.get_shared_function_info_addr(self.data))
         self.append('kContextAddr: 0x%x' % JSFunction.get_context_addr(self.data))
         self.append('kLiteralsAddr: 0x%x' % JSFunction.get_literals_addr(self.data))
         self.append('kNonWeakFieldsEndAddr: 0x%x' % JSFunction.get_non_weak_fields_end_addr(self.data))
+        self.append('kCodeEntryAddr: 0x%x' % JSFunction.get_code_entry_addr(self.data))
         self.append('kNextFunctionLinkAddr: 0x%x' % JSFunction.get_next_function_link_addr(self.data))
 
 
@@ -1851,48 +1800,28 @@ class JSGlobalProxy(JSObject):
         self.append('kHashAddr: 0x%x' % JSGlobalProxy.get_hash_addr(self.data))
 
 
-class GlobalObject(JSObject):
+class JSGlobalObject(JSObject):
     """
-    class GlobalObject: public JSObject;
-    Common super class for JavaScript global objects and the special
-    builtins global objects.
+    class JSGlobalObject : public JSObject;
+    JavaScript global object.
     """
-    kBuiltinsOffset = JSObject.kHeaderSize
-    kNativeContextOffset = kBuiltinsOffset + kPointerSize
-    kGlobalContextOffset = kNativeContextOffset + kPointerSize
-    kGlobalProxyOffset = kGlobalContextOffset + kPointerSize
+    kNativeContextOffset = JSObject.kHeaderSize
+    kGlobalProxyOffset = kNativeContextOffset + kPointerSize
     kHeaderSize = kGlobalProxyOffset + kPointerSize
-    kSize = kHeaderSize  # for mem dump needed
-
-    @staticmethod
-    def get_builtins_addr(data):
-        return get_dword(data, GlobalObject.kBuiltinsOffset)
+    kSize = kHeaderSize
 
     @staticmethod
     def get_native_context_addr(data):
-        return get_dword(data, GlobalObject.kNativeContextOffset)
-
-    @staticmethod
-    def get_global_context_addr(data):
-        return get_dword(data, GlobalObject.kGlobalContextOffset)
+        return get_dword(data, JSGlobalObject.kNativeContextOffset)
 
     @staticmethod
     def get_global_proxy_addr(data):
-        return get_dword(data, GlobalObject.kGlobalProxyOffset)
+        return get_dword(data, JSGlobalObject.kGlobalProxyOffset)
 
     def do_parse(self):
         JSObject.do_parse(self)
-        self.append('kBuiltinsAddr: 0x%x' % GlobalObject.get_builtins_addr(self.data))
-        self.append('kNativeContextAddr: 0x%x' % GlobalObject.get_native_context_addr(self.data))
-        self.append('kGlobalContextAddr: 0x%x' % GlobalObject.get_global_context_addr(self.data))
-        self.append('kGlobalProxyAddr: 0x%x' % GlobalObject.get_global_proxy_addr(self.data))
-
-
-class JSGlobalObject(GlobalObject):
-    """
-    class JSGlobalObject: public GlobalObject;
-    JavaScript global object.
-    """
+        self.append('kNativeContextAddr: 0x%x' % JSGlobalObject.get_native_context_addr(self.data))
+        self.append('kGlobalProxyAddr: 0x%x' % JSGlobalObject.get_global_proxy_addr(self.data))
 
 
 class JSValue(JSObject):
@@ -1983,19 +1912,17 @@ class JSArrayBuffer(JSObject):
     """
     class JSArrayBuffer: public JSObject;
     """
-    kBackingStoreOffset = JSObject.kHeaderSize
-    kByteLengthOffset = kBackingStoreOffset + kPointerSize
-    kFlagOffset = kByteLengthOffset + kPointerSize
-    # [weak_next]: linked list of array buffers.
-    kWeakNextOffset = kFlagOffset + kPointerSize
-    # [weak_first_array]: weak linked list of views.
-    kWeakFirstViewOffset = kWeakNextOffset + kPointerSize
-    kSize = kWeakFirstViewOffset + kPointerSize
-    kSizeWithInternalFields = kSize + kInternalFieldCount * kPointerSize
+    kByteLengthOffset = JSObject.kHeaderSize
+    # NOTE: GC will visit objects fields:
+    # 1. From JSObject::BodyDescriptor::kStartOffset to kByteLengthOffset +
+    #    kPointerSize
+    # 2. From start of the internal fields and up to the end of them
+    kBackingStoreOffset = kByteLengthOffset + kPointerSize
+    kBitFieldSlot = kBackingStoreOffset + kPointerSize
+    kBitFieldOffset = kBitFieldSlot
+    kSize = kBitFieldSlot + kPointerSize
 
-    # Bit position in a flag
-    kIsExternalBit = 0
-    kShouldBeFreed = 1
+    kSizeWithInternalFields = kSize + kInternalFieldCount * kPointerSize
 
     @staticmethod
     def get_backing_store_addr(data):
@@ -2006,54 +1933,55 @@ class JSArrayBuffer(JSObject):
         return get_dword_smi(data, JSArrayBuffer.kByteLengthOffset)
 
     @staticmethod
-    def get_flag(data):
-        return get_dword(data, JSArrayBuffer.kFlagOffset)
+    def get_bit_field(data):
+        return get_dword(data, JSArrayBuffer.kBitFieldOffset)
 
     @staticmethod
-    def get_weak_next_addr(data):
-        return get_dword(data, JSArrayBuffer.kWeakNextOffset)
-
-    @staticmethod
-    def get_weak_first_view_addr(data):
-        return get_dword(data, JSArrayBuffer.kWeakFirstViewOffset)
-
-    @staticmethod
+    @BitField(1)
     def is_external(data):
-        return to_boolean(JSArrayBuffer.get_flag(data), JSArrayBuffer.kIsExternalBit)
+        return JSArrayBuffer.get_bit_field(data)
 
     @staticmethod
-    def is_should_be_freed(data):
-        return to_boolean(JSArrayBuffer.get_flag(data), JSArrayBuffer.kShouldBeFreed)
+    @BitField(2)
+    def is_neuterable(data):
+        return JSArrayBuffer.get_bit_field(data)
+
+    @staticmethod
+    @BitField(3)
+    def was_neutered(data):
+        return JSArrayBuffer.get_bit_field(data)
+
+    @staticmethod
+    @BitField(4)
+    def is_shared(data):
+        return JSArrayBuffer.get_bit_field(data)
 
     def do_parse(self):
         JSObject.do_parse(self)
-        self.append('kBackingStoreAddr: 0x%x' % JSArrayBuffer.get_backing_store_addr(self.data))
         self.append('kByteLength: 0x%x' % JSArrayBuffer.get_byte_length(self.data))
-        self.append('kFlag: 0x%x'
-                    '\n\tkIsExternal: 0x%x'
-                    '\n\tkShouldBeFreed: 0x%x' %
-                    (JSArrayBuffer.get_flag(self.data),
+        self.append('kBackingStoreAddr: 0x%x' % JSArrayBuffer.get_backing_store_addr(self.data))
+        self.append('kBitField: 0x%x'
+                    '\n\tIsExternal: 0x%x'
+                    '\n\tIsNeuterable: 0x%x'
+                    '\n\tWasNeutered: 0x%x'
+                    '\n\tIsShared: 0x%x' %
+                    (JSArrayBuffer.get_bit_field(self.data),
                      JSArrayBuffer.is_external(self.data),
-                     JSArrayBuffer.is_should_be_freed(self.data)))
-        self.append('kWeakNextAddr: 0x%x' % JSArrayBuffer.get_weak_next_addr(self.data))
-        self.append('kWeakFirstView: 0x%x' % JSArrayBuffer.get_weak_first_view_addr(self.data))
+                     JSArrayBuffer.is_neuterable(self.data),
+                     JSArrayBuffer.was_neutered(self.data),
+                     JSArrayBuffer.is_shared(self.data),))
 
 
 class JSArrayBufferView(JSObject):
     """
     class JSArrayBufferView: public JSObject;
     """
-    # [buffer]: ArrayBuffer that this typed array views.
     kBufferOffset = JSObject.kHeaderSize
-    # [byte_length]: offset of typed array in bytes.
     kByteOffsetOffset = kBufferOffset + kPointerSize
-    # [byte_length]: length of typed array in bytes.
     kByteLengthOffset = kByteOffsetOffset + kPointerSize
-    # [weak_next]: linked list of typed arrays over the same array buffer.
-    kWeakNextOffset = kByteLengthOffset + kPointerSize
-    kViewSize = kWeakNextOffset + kPointerSize
+    kViewSize = kByteLengthOffset + kPointerSize
 
-    kSize = kViewSize
+    kSize = kViewSize  # for mem dump
 
     @staticmethod
     def get_buffer_addr(data):
@@ -2064,19 +1992,14 @@ class JSArrayBufferView(JSObject):
         return get_dword(data, JSArrayBufferView.kByteOffsetOffset)
 
     @staticmethod
-    def get_byte_length(data):
-        return get_dword_smi(data, JSArrayBufferView.kByteLengthOffset)
-
-    @staticmethod
-    def get_weak_next_addr(data):
-        return get_dword(data, JSArrayBufferView.kWeakNextOffset)
+    def get_byte_length_addr(data):
+        return get_dword(data, JSArrayBufferView.kByteLengthOffset)
 
     def do_parse(self):
         JSObject.do_parse(self)
         self.append('kBufferAddr: 0x%x' % JSArrayBufferView.get_buffer_addr(self.data))
         self.append('kByteOffsetAddr: 0x%x' % JSArrayBufferView.get_byte_offset_addr(self.data))
-        self.append('kByteLength: 0x%x' % JSArrayBufferView.get_byte_length(self.data))
-        self.append('kWeakNextAddr: 0x%x' % JSArrayBufferView.get_weak_next_addr(self.data))
+        self.append('kByteLengthAddr: 0x%x' % JSArrayBufferView.get_byte_length_addr(self.data))
 
 
 class JSTypedArray(JSArrayBufferView):
@@ -2119,6 +2042,12 @@ class JSArray(JSObject):
     # Number of element slots to pre-allocate for an empty array.
     kPreallocatedArrayElements = 4
 
+    # # 600 * KB is the Page::kMaxRegularHeapObjectSize defined in spaces.h which
+    # # we do not want to include in objects.h
+    # # Note that Page::kMaxRegularHeapObjectSize has to be in sync with
+    # # kInitialMaxFastElementArray which is checked in a DCHECK in heap.cc.
+    # kInitialMaxFastElementArray = (600 * KB - FixedArray.kHeaderSize - kSize - AllocationMemento.kSize) / kPointerSize
+
     @staticmethod
     def get_length(data):
         return get_dword_smi(data, JSArray.kLengthOffset)
@@ -2137,6 +2066,22 @@ class Struct(HeapObject):
     """
 
 
+class AllocationMemento(Struct):
+    """
+    class AllocationMemento: public Struct;
+    """
+    kAllocationSiteOffset = HeapObject.kHeaderSize
+    kSize = kAllocationSiteOffset + kPointerSize
+
+    @staticmethod
+    def get_allocation_site_addr(data):
+        return get_dword(data, AllocationMemento.kAllocationSiteOffset)
+
+    def do_parse(self):
+        Struct.do_parse(self)
+        self.append('kAllocationSiteAddr: 0x%x' % AllocationMemento.get_allocation_site_addr(self.data))
+
+
 class AccessorInfo(Struct):
     """
     class AccessorInfo: public Struct;
@@ -2149,6 +2094,9 @@ class AccessorInfo(Struct):
     # Bit positions in flag.
     kAllCanReadBit = 0
     kAllCanWriteBit = 1
+    kSpecialDataProperty = 2
+
+    #   class AttributesField : public BitField<PropertyAttributes, 3, 3> {};
 
     @staticmethod
     def get_name_addr(data):
@@ -2209,9 +2157,11 @@ class TemplateInfo(Struct):
     class TemplateInfo: public Struct;
     """
     kTagOffset = HeapObject.kHeaderSize
-    kPropertyListOffset = kTagOffset + kPointerSize
+    kNumberOfProperties = kTagOffset + kPointerSize
+    kPropertyListOffset = kNumberOfProperties + kPointerSize
     kPropertyAccessorsOffset = kPropertyListOffset + kPointerSize
-    kHeaderSize = kPropertyAccessorsOffset + kPointerSize
+    kPropertyIntrinsicsOffset = kPropertyAccessorsOffset + kPointerSize
+    kHeaderSize = kPropertyIntrinsicsOffset + kPointerSize
     kSize = kHeaderSize  # for mem dump needed
 
     @staticmethod
@@ -2226,11 +2176,16 @@ class TemplateInfo(Struct):
     def get_property_accessors_addr(data):
         return get_dword(data, TemplateInfo.kPropertyAccessorsOffset)
 
+    @staticmethod
+    def get_property_intrinsics_addr(data):
+        return get_dword(data, TemplateInfo.kPropertyIntrinsicsOffset)
+
     def do_parse(self):
         Struct.do_parse(self)
         self.append('kTagAddr: 0x%x' % TemplateInfo.get_tag_addr(self.data))
         self.append('kPropertyListAddr: 0x%x' % TemplateInfo.get_property_list_addr(self.data))
         self.append('kPropertyAccessorsAddr: 0x%x' % TemplateInfo.get_property_accessors_addr(self.data))
+        self.append('kPropertyIntrinsicsAddr: 0x%x' % TemplateInfo.get_property_intrinsics_addr(self.data))
 
 
 class FunctionTemplateInfo(TemplateInfo):
@@ -2251,12 +2206,15 @@ class FunctionTemplateInfo(TemplateInfo):
     kFlagOffset = kAccessCheckInfoOffset + kPointerSize
     kLengthOffset = kFlagOffset + kPointerSize
     kSize = kLengthOffset + kPointerSize
+
     kHiddenPrototypeBit = 0
     kUndetectableBit = 1
     kNeedsAccessCheckBit = 2
     kReadOnlyPrototypeBit = 3
     kRemovePrototypeBit = 4
     kDoNotCacheBit = 5
+    kInstantiatedBit = 6
+    kAcceptAnyReceiver = 7
 
     @staticmethod
     def get_serial_number_addr(data):
@@ -2396,16 +2354,15 @@ class Handle:
         Args:
             size: read size (int)
 
-        Returns: data (str)
+        Returns: data (str). Invalid address returns ''.
 
         """
         # Double Check
         location = raw_heap_object(self._location) if self.is_heap_object() else self._location
         data = read_mem(location, size)
-        if data is None:
+        if not data:
             warn_log = "Cannot access memory at address 0x%x" % location
             warning(warn_log)
-            raise MemoryError(warn_log)
         return data
 
     def get_instance_type(self):
@@ -2414,10 +2371,16 @@ class Handle:
         Returns: type num (int)
 
         """
-        map_handle = Handle(HeapObject.get_map_addr(self.data(kPointerSize)))
+        map_data = self.data(kPointerSize)
+        if not map_data:
+            return None
+        map_handle = Handle(HeapObject.get_map_addr(map_data))
         if not map_handle.is_heap_object():
             return None
-        return Map.get_instance_type(map_handle.data(Map.kSize))
+        map_map_data = map_handle.data(Map.kSize)
+        if not map_map_data:
+            return None
+        return Map.get_instance_type(map_map_data)
 
     def parse(self, bitness=32):
         """
@@ -2425,7 +2388,7 @@ class Handle:
         Args:
             bitness: arch bitness (int)
 
-        Returns: parse result (list)
+        Returns: parse result (int / list)
 
         """
         if self._type is not None and self._class is not None and Map.type_to_class(self._type) != self._class:
@@ -2487,12 +2450,6 @@ init_elements_kind_to_name()
 ######################################################################################
 #                          instance type auto setup                                  #
 ######################################################################################
-
-NAME_TO_TYPE = {
-    'array': InstanceType.JS_ARRAY_TYPE,
-    'object': InstanceType.JS_OBJECT_TYPE,
-    'arraybuffer': InstanceType.JS_ARRAY_BUFFER_TYPE
-}
 
 # { int => list }
 TYPE_TO_NAME = {}
@@ -2590,29 +2547,54 @@ add_type_to_class(InstanceType.CONS_ONE_BYTE_STRING_TYPE, ConsString)
 
 peda = None
 
+# for opt
+NAME_TO_TYPE = {
+    'array': InstanceType.JS_ARRAY_TYPE,
+    'object': InstanceType.JS_OBJECT_TYPE,
+    'arraybuffer': InstanceType.JS_ARRAY_BUFFER_TYPE,
+    'map': InstanceType.MAP_TYPE
+}
+
 
 def invoke(peda_, *arg):
     """
     Google v8 debug helper
     Usage:
-        v8 [addr]
+        v8 [type] [addr]
     """
     global peda
     peda = peda_
     (opt, addr) = normalize_argv(arg, 2)
-    if opt is None:
+
+    type_name = NAME_TO_TYPE.get(opt)
+
+    # support opt as 'handle'
+    if type_name is None and opt == 'handle':
+        type_name = -1
+
+    if opt is None or type_name is not None and addr is None:
         try:
             v = peda.parse_and_eval('$')
         except:
             warning('gdb history is empty')
             return
+    elif type_name is not None and addr is not None:
+        v = addr
     else:
         v = opt
+
     a = to_int(v)
+
+    # support opt as 'handle
+    if type_name == -1 and a is not None:
+        a = get_dword(read_mem(a))
+        type_name = None
+
     if a is None:
         warning('Invalid arguments')
         return
-    h = Handle(a)
+
+    h = Handle(a, type_name)
     result = h.parse()
 
     if result is not None:
@@ -2625,4 +2607,5 @@ def invoke(peda_, *arg):
     else:
         warning('Cannot decode this value.')
 
-# invoke.options = ['handle', 'addr', 'map']
+
+invoke.options = NAME_TO_TYPE.keys() + ['handle']
