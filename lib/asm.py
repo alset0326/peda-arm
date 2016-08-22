@@ -148,7 +148,7 @@ class Asm(object):
             m = pattern.match(line)
             if m:
                 (addr, bytes, code) = m.groups()
-                sc = '"%s"' % to_hexstr(codecs.decode(bytes, 'hex'))
+                sc = '"0x%s"' % bytes
                 shellcode += [(sc, "0x" + addr, code.strip())]
 
         maxlen = max([len(x[0]) for x in shellcode])

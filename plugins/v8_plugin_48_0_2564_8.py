@@ -593,8 +593,8 @@ class FixedTypedArray(FixedTypedArrayBase):
 
     def do_parse(self):
         FixedTypedArrayBase.do_parse(self)
-        scalars = ',\t'.join([str(i) for i in self.get_scalars()])
-        self.append('ScalarsAddr: 0x%x  ==>  [%s]' % (self.get_data_ptr(self.data), scalars))
+        scalars = ',\t'.join(['0x%x' % i for i in self.get_scalars()])
+        self.append('ScalarsAddr: 0x%x  ==>  [%s]  (Smi not casted)' % (self.get_data_ptr(self.data), scalars))
 
 
 class FixedUint8Array(FixedTypedArray):
@@ -1767,7 +1767,7 @@ class JSFunction(JSObject):
         self.append('kContextAddr: 0x%x' % JSFunction.get_context_addr(self.data))
         self.append('kLiteralsAddr: 0x%x' % JSFunction.get_literals_addr(self.data))
         self.append('kNonWeakFieldsEndAddr: 0x%x' % JSFunction.get_non_weak_fields_end_addr(self.data))
-        self.append('kCodeEntryAddr: 0x%x' % JSFunction.get_code_entry_addr(self.data))
+        self.append('\tkCodeEntryAddr: 0x%x' % JSFunction.get_code_entry_addr(self.data))
         self.append('kNextFunctionLinkAddr: 0x%x' % JSFunction.get_next_function_link_addr(self.data))
 
 

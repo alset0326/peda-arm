@@ -4515,7 +4515,6 @@ class PEDACmd(object):
                             text += " | %s\n" % line.strip()
                     text = format_disasm_code(text, pc) + "\n"
                     text += " |->"
-                    code = None
                     if 'x' in opcode:
                         current_mode = peda.execute_redirect('show arm force-mode')
                         match = re.search('"(.*)"', current_mode)
@@ -5832,7 +5831,7 @@ class PEDACmd(object):
 
     def assemble(self, *arg):
         """
-        On the fly assemble and execute instructions using AS
+        On the fly assemble and execute instructions using AS. Auto exec when changing instruction at pc.
         Usage:
             MYNAME [mode] [address]
                 mode: arm / aarch64 / thumb / thumb64
@@ -5905,13 +5904,13 @@ class PEDACmd(object):
 
             address += size
             inst_code += bincode
-            msg("hexify: \"%s\"" % to_hexstr(bincode))
+            msg('hexify: "%s"' % to_hexstr(bincode))
 
         text = Asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
         if text:
             msg("Assembled%s instructions:" % ("/Executed" if exec_mode else ""))
             msg(text)
-            msg("hexify: \"%s\"" % to_hexstr(inst_code))
+            msg('hexify: "%s"' % to_hexstr(inst_code))
 
         return
 
@@ -6257,6 +6256,7 @@ class PEDACmd(object):
             self._missing_argument()
 
         func = globals()[command]
+        result = ''
         if command == "int2hexstr":
             if to_int(carg) is None:
                 msg("Not a number")
@@ -6360,6 +6360,7 @@ class PluginCommand(gdb.Command):
             if config.Option.get("debug") == "on":
                 msg("Exception: %s" % e)
                 traceback.print_exc()
+            gdb.execute('peda pflush')
             peda.restore_user_command("all")
             msg(self.__doc__, 'green')
 
@@ -6402,6 +6403,7 @@ class pedaGDBCommand(gdb.Command):
                     if config.Option.get("debug") == "on":
                         msg("Exception: %s" % e)
                         traceback.print_exc()
+                    gdb.execute('peda pflush')
                     peda.restore_user_command("all")
                     pedacmd.help(cmd)
             else:
@@ -6488,17 +6490,6 @@ for cmd in pedacmd.commands:
     func.__func__.__doc__ = func.__doc__.replace("MYNAME", cmd)
     if cmd not in ["help", "show", "set"]:
         Alias(cmd, "peda %s" % cmd, 0)
-
-
-# handle SIGINT / Ctrl-C
-def sigint_handler(signal, frame):
-    warning("Got Ctrl+C / SIGINT!")
-    gdb.execute("set logging off")
-    peda.restore_user_command("all")
-    raise KeyboardInterrupt
-
-
-signal.signal(signal.SIGINT, sigint_handler)
 
 # custom hooks
 peda.define_user_command("hook-stop", "peda context\nsession autosave")
