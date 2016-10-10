@@ -558,6 +558,25 @@ class PEDA(object):
         else:
             return self.execute("%s %s" % (cmd, location))
 
+    def set_breakpoint_redirect(self, location, temp=None, hard=None):
+        """
+        Wrapper for GDB break command
+            - location: target function or address (String ot Int)
+
+        Returns:
+            - True if can set breakpoint
+        """
+        cmd = "break"
+        if hard:
+            cmd = "h" + cmd
+        if temp:
+            cmd = "t" + cmd
+
+        if to_int(location) is not None:
+            return self.execute_redirect("%s *0x%x" % (cmd, to_int(location)))
+        else:
+            return self.execute_redirect("%s %s" % (cmd, location))
+
     def get_breakpoint(self, num):
         """
         Get info of a specific breakpoint
@@ -575,11 +594,12 @@ class PEDA(object):
 
         lines = out.splitlines()[1:]
         # breakpoint regex
-        p = re.compile("^(\d*)\s*(.*breakpoint)\s*(keep|del)\s*(y|n)\s*(0x[^ ]*)\s*(.*)")
+        # 1       breakpoint     keep y   0xb6cb6342 <__libc_init+22>\n
+        p = re.compile("^(\d+) +(.*breakpoint) +(keep|del) +(y|n) +(0x[^ ]*) +(.*)")
         m = p.match(lines[0])
         if not m:
             # catchpoint/watchpoint regex
-            p = re.compile("^(\d*)\s*(.*point)\s*(keep|del)\s*(y|n)\s*(.*)")
+            p = re.compile("^(\d*) +(.*point) +(keep|del) +(y|n) +(.*)")
             m = p.match(lines[0])
             if not m:
                 return None
@@ -926,16 +946,22 @@ class PEDA(object):
         if search == "":
             search_data = 0
         # tode
-        tmpfd = tmpfile(is_binary_file=True)
-        self.execute('remote get %s %s' % (filename, tmpfd.name))
-        if not os.path.exists(tmpfd.name):
-            tmpfd.write('something')
-            tmpfd.close()
-            return result
+        tmpfd = None
+        if peda.is_target_remote():
+            tmpfd = tmpfile(is_binary_file=True)
+            self.execute('remote get %s %s' % (filename, tmpfd.name))
+            if not os.path.exists(tmpfd.name):
+                tmpfd.write('something')
+                tmpfd.close()
+                return result
+            name = tmpfd.name
+        else:
+            name = filename
 
         out = execute_external_command(
-            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (config.OBJDUMP, tmpfd.name, search))
-        tmpfd.close()
+            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (config.OBJDUMP, name, search))
+        if peda.is_target_remote():
+            tmpfd.close()
 
         for line in out.splitlines():
             if not line:
@@ -957,7 +983,7 @@ class PEDA(object):
             m = p.search(line)
             if m:
                 (address, opcode, opers) = m.groups()
-                if "call" in opcode and search in opers:
+                if "b" in opcode and search in opers:
                     result += [(addr, line.strip())]
                 if search_data:
                     if "mov" in opcode and search in opers:
@@ -1569,7 +1595,7 @@ class PEDA(object):
             maps = []
             mpath = "/proc/%s/maps" % pid
             # 00400000-0040b000 r-xp 00000000 08:02 538840  /path/to/file
-            pattern = re.compile("([0-9a-f]*)-([0-9a-f]*) ([rwxps-]*)(?: [^ ]*){3} *(.*)")
+            pattern = re.compile("^([0-9a-f]+)-([0-9a-f]+) ([-rwxps]+)(?: \S+){3} *(.*)$", re.MULTILINE)
 
             if remote:  # remote target
                 out = self.read_from_remote(mpath)
@@ -1583,7 +1609,7 @@ class PEDA(object):
                     end = to_int("0x%s" % end)
                     if mapname == "":
                         mapname = "mapped"
-                    maps += [(start, end, perm, mapname)]
+                    maps.append((start, end, perm, mapname))
             return maps
 
         result = []
@@ -1614,12 +1640,12 @@ class PEDA(object):
         if to_int(name) is None:
             for (start, end, perm, mapname) in maps:
                 if name in mapname:
-                    result += [(start, end, perm, mapname)]
+                    result.append((start, end, perm, mapname))
         else:
             addr = to_int(name)
             for (start, end, perm, mapname) in maps:
                 if start <= addr and addr < end:
-                    result += [(start, end, perm, mapname)]
+                    result.append((start, end, perm, mapname))
 
         return result
 
@@ -2281,7 +2307,7 @@ class PEDA(object):
             - entry address (Int)
         """
         out = self.execute_redirect("info files")
-        p = re.compile("Entry point: ([^\s]*)")
+        p = re.compile("Entry point: (\S*)")
         if out:
             m = p.search(out)
             if m:
@@ -2309,7 +2335,7 @@ class PEDA(object):
         if not out:
             return {}
 
-        p = re.compile("\s*(0x[^-]*)->(0x[^ ]*) at (.*):\s*([^ ]*)\s*(.*)")
+        p = re.compile("^ *\S+ +(0x[^-]+)->(0x[^ ]+) at (\S+): +(\S+) +(.*)$", re.M)
         matches = p.findall(out)
 
         for (start, end, offset, hname, attr) in matches:
@@ -2484,10 +2510,16 @@ class PEDA(object):
         elfinfo = {}
         vmap = self.get_vmmap(filename)
         elfbase = vmap[0][0] if vmap else 0
+        tmpfd = tmpfile(is_binary_file=True)
+        self.execute('remote get %s %s' % (filename, tmpfd.name))
+        if not os.path.exists(tmpfd.name):
+            tmpfd.write('something')
+            tmpfd.close()
+            return {}
         out = execute_external_command("%s -W -S %s" % (config.READELF, filename))
         if not out:
             return {}
-        p = re.compile(".*\[.*\] (\.[^ ]*) [^0-9]* ([^ ]*) [^ ]* ([^ ]*)(.*)")
+        p = re.compile("^ *\[ *\d*\] +(\S+) +\S+ +(\S+) +\S+ +(\S*)(.*)$", re.M)
         matches = p.findall(out)
         if not matches:
             return None
@@ -2546,7 +2578,7 @@ class PEDA(object):
             if not out:
                 return None
 
-            p = re.compile("[^\n]*\s*(0x[^ ]*) - (0x[^ ]*) is (\.[^ ]*) in (.*)")
+            p = re.compile("^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
             soheaders = p.findall(out)
 
             result = []
@@ -3795,7 +3827,7 @@ class PEDACmd(object):
             for symname in sorted(symbols):
                 if "plt" not in symname: continue
                 if name in symname:  # todo fixme(longld) bounds checking?
-                    line = peda.execute_redirect("break %s" % symname)
+                    line = peda.set_breakpoint_redirect(symname)
                     msg("%s (%s)" % (line.strip("\n"), symname))
         return
 
@@ -3865,10 +3897,10 @@ class PEDACmd(object):
             if not symbol:
                 warning("cannot retrieve info of function '%s'" % function)
                 return
-            peda.execute("break *0x%x" % symbol[function + "@plt"])
+            peda.set_breakpoint("*0x%x" % symbol[function + "@plt"])
 
         else:  # addressed function
-            peda.execute("break *%s" % function)
+            peda.set_breakpoint("*%s" % function)
 
         peda.execute("set %s = $bpnum" % bnum)
         tmpfd = tmpfile()
@@ -4029,10 +4061,7 @@ class PEDACmd(object):
             MYNAME address | function
         """
         (address,) = normalize_argv(arg, 1)
-        if to_int(address) is None:
-            peda.execute("tbreak %s" % address)
-        else:
-            peda.execute("tbreak *0x%x" % address)
+        peda.set_breakpoint(address)
         pc = peda.getpc()
         if pc is None:
             peda.execute("run")
@@ -4105,31 +4134,22 @@ class PEDACmd(object):
         Usage:
             MYNAME
         """
-        entries = ["main"]
-        main_addr = peda.main_entry()
-        if main_addr:
-            entries += ["*0x%x" % main_addr]
-        # todo
-        entries += ["__libc_start_main@plt"]
-        entries += ["_start"]
-        entries += ["_init"]
+        # todo: experimental for now only support remote android debug
 
-        started = 0
-        for e in entries:
-            out = peda.execute_redirect("tbreak %s" % e)
-            if out and "breakpoint" in out:
-                peda.execute("run %s" % ' '.join(arg))
-                started = 1
-                break
+        # try to use function __libc_init@plt to get main entry
+        out = peda.set_breakpoint_redirect('__libc_init@plt', True)
+        if out and "breakpoint" in out:
+            breakpoint_index = re.findall('Temporary breakpoint (\d+) at.*', out)[0]
+            peda.run_gdbscript_code('commands %s;tbreak *($r2&(~1));continue;end;' % breakpoint_index)
+            peda.execute('continue')
+            return
 
-        if not started:  # try ELF entry point or just "run" as the last resort
-            elf_entry = peda.elfentry()
-            if elf_entry:
-                out = peda.execute_redirect("tbreak *%s" % elf_entry)
+        # try ELF entry point
+        elf_entry = peda.elfentry()
+        if elf_entry:
+            out = peda.set_breakpoint_redirect("*%s" % elf_entry)
 
-            peda.execute("run")
-
-        return
+        peda.execute("continue")
 
     # stepuntil()
     def stepuntil(self, *arg):
@@ -6328,7 +6348,7 @@ class PEDACmd(object):
             self.plugins[name] = func
             PluginCommand(name)
             info('Plugin %s loaded.' % name)
-            info('Plugin doc:\n%s' % green(func.__doc__.strip('\n')))
+            info('Plugin doc:\n%s' % func.__doc__.strip('\n'))
 
     plugin.options = [i[:-10] for i in os.listdir(os.path.dirname(PEDAFILE) + "/plugins/") if i.endswith('-plugin.py')]
 
