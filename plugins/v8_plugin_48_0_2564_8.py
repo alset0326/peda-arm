@@ -176,17 +176,26 @@ def decode_v8_value(v, bitness=32):
         return base_str
 
 
-def to_dword(data, num=1, unpack=True):
+def to_qword(data, unpack=True):
+    num = len(data) / kDoubleSize
+    result = struct.unpack('<' + 'Q' * num, data)
+    return result[0] if unpack is True and num == 1 else result
+
+
+def to_dword(data, unpack=True):
+    num = len(data) / kPointerSize
     result = struct.unpack('<' + 'I' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
 
-def to_byte(data, num=1, unpack=True):
+def to_byte(data, unpack=True):
+    num = len(data) / kCharSize
     result = struct.unpack('<' + 'B' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
 
-def to_double(data, num=1, unpack=True):
+def to_double(data, unpack=True):
+    num = len(data) / kDoubleSize
     result = struct.unpack('<' + 'd' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
@@ -232,7 +241,7 @@ def get_dword(data, offset=0):
 
 
 def get_byte(data, offset=0):
-    return to_byte(read(data, offset, 1))
+    return to_byte(read(data, offset, kCharSize))
 
 
 def BitField(shift, size=1):
@@ -420,8 +429,8 @@ class HeapNumber(HeapObject):
     def do_parse(self):
         HeapObject.do_parse(self)
         self.append('kValue: %f' % HeapNumber.get_value(self.data))
-        self.append('Exponent: 0x%x' % HeapNumber.get_exponent(self.data))
-        self.append('Sign: 0x%x' % HeapNumber.get_sign(self.data))
+        self.append('\tExponent: 0x%x' % HeapNumber.get_exponent(self.data))
+        self.append('\tSign: 0x%x' % HeapNumber.get_sign(self.data))
 
 
 class FixedArrayBase(HeapObject):
@@ -464,7 +473,7 @@ class FixedArray(FixedArrayBase):
         if length == 0:
             return []
         self.increase_size(kPointerSize * length)
-        elements = to_dword(read(self.data, self.kSize, kPointerSize * length), length, False)
+        elements = to_dword(read(self.data, self.kSize, kPointerSize * length), False)
         return elements
 
     def do_parse(self):
@@ -480,6 +489,40 @@ class FixedDoubleArray(FixedArrayBase):
     """
     kMaxSize = 512 * MB
     kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) / kDoubleSize
+
+    def get_elements(self):
+        length = FixedDoubleArray.get_length(self.data)
+        if length == 0:
+            return []
+        self.increase_size(length * kDoubleSize)
+        elements = to_double(read(self.data, self.kSize, kDoubleSize * length), False)
+        return elements
+
+    def get_representation(self):
+        length = FixedDoubleArray.get_length(self.data)
+        if length == 0:
+            return []
+        # Note that size already increased
+        representations = to_qword(read(self.data, self.kSize, kDoubleSize * length), False)
+        return representations
+
+    def get_representation_dwords(self):
+        length = FixedDoubleArray.get_length(self.data)
+        if length == 0:
+            return []
+        # Note that size already increased
+        length *= 2
+        representations = to_dword(read(self.data, self.kSize, kPointerSize * length), False)
+        return representations
+
+    def do_parse(self):
+        FixedArrayBase.do_parse(self)
+        elements = ',\t'.join(['%f' % i for i in self.get_elements()])
+        representations = ',\t'.join(['0x%x' % i for i in self.get_representation()])
+        dwords = ',\t'.join(['0x%x' % i for i in self.get_representation_dwords()])
+        self.append('Elements: (Addr 0x%x)  ==>  [%s]' % (self.handle.decode() + self.kSize, elements))
+        self.append('\tRepresentations  ==>  [%s]' % representations)
+        self.append('\tDword Representations  ==>  [%s]' % dwords)
 
 
 class ByteArray(FixedArrayBase):
@@ -501,7 +544,7 @@ class ByteArray(FixedArrayBase):
         if length == 0:
             return []
         self.increase_size(length)
-        elements = to_byte(read(self.data, self.kSize, length), length)
+        elements = to_byte(read(self.data, self.kSize, length))
         if length == 1:
             elements = [elements]
         elements = [str(i) for i in elements]
@@ -762,6 +805,11 @@ class Code(HeapObject):
     @staticmethod
     def get_constant_pool_addr(data):
         return get_dword(data, Code.kConstantPoolOffset)
+
+    # Support for get_object_size
+    @staticmethod
+    def get_body_size(data):
+        return RoundUp(Code.get_instruction_size_addr(data), kObjectAlignment)
 
     def do_parse(self):
         HeapObject.do_parse(self)
@@ -1093,7 +1141,7 @@ class Map(HeapObject):
     def do_parse(self):
         HeapObject.do_parse(self)
         self.append('kInstanceSizes: 0x%x'
-                    '\n\tkInstanceSize: 0x%x'
+                    '\n\tkInstanceSize: 0x%x (real size)'
                     '\n\tkInObjectPropertiesOrConstructorFunctionIndexOffset: 0x%x'
                     '\n\tkUnusedOffset: 0x%x'
                     '\n\tkVisitorId: 0x%x' %
@@ -1144,10 +1192,10 @@ class Map(HeapObject):
         self.append('kBitField3: 0x%x'
                     '\n\tEnumLengthBits: 0x%x'
                     '\n\tNumberOfOwnDescriptorsBits: 0x%x'
-                    '\n\tDictionaryMap : 0x%x'
-                    '\n\tOwnsDescriptors : 0x%x'
-                    '\n\tHiddenPrototype : 0x%x'
-                    '\n\tDeprecated : 0x%x'
+                    '\n\tIsDictionaryMap : 0x%x'
+                    '\n\tIsOwnsDescriptors : 0x%x'
+                    '\n\tIsHiddenPrototype : 0x%x'
+                    '\n\tIsDeprecated : 0x%x'
                     '\n\tIsUnstable : 0x%x'
                     '\n\tIsMigrationTarget : 0x%x'
                     '\n\tIsStrong : 0x%x'
@@ -1632,6 +1680,14 @@ class JSObject(JSReceiver):
 
     @staticmethod
     def get_internal_field_count(data):
+        """
+        Copy and modify from JSObject::GetInternalFieldCount(Map* map)
+        Args:
+            data: header data (str)
+
+        Returns: Internal field count (int)
+
+        """
         # Make sure to adjust for the number of in-object properties. These
         # properties do contribute to the size, but are not internal fields.
         size = HeapObject.get_object_size(data)
@@ -1642,6 +1698,14 @@ class JSObject(JSReceiver):
 
     @staticmethod
     def get_header_size(data):
+        """
+        Copy and modify from JSObject::GetHeaderSize(InstanceType type)
+        Args:
+            data: header data (str)
+
+        Returns: header size (int)
+
+        """
         map_addr = HeapObject.get_map_addr(data)
         map_object = Map(Handle(map_addr))
         instance_type = map_object.get_instance_type(map_object.data)
@@ -1690,12 +1754,27 @@ class JSObject(JSReceiver):
             return JSObject.kHeaderSize
         return 0
 
-    def get_internal_fields(self, field_count=None):
-        if field_count is None:
-            field_count = self.get_internal_field_count(self.data)
+    def get_internal_fields(self):
+        field_count = JSObject.get_internal_field_count(self.data)
         self.increase_size(field_count * kPointerSize)
-        return to_dword(read(self.data, JSObject.get_header_size(self.data), field_count * kPointerSize), field_count,
-                        False)
+        return to_dword(read(self.data, JSObject.get_header_size(self.data), field_count * kPointerSize), False)
+
+    def get_in_object_properties(self):
+        """
+        Get InObjectProperties
+        Returns: [str]
+
+        """
+        size = HeapObject.get_object_size(self.data)
+        self.update_size(size)
+        map_addr = HeapObject.get_map_addr(self.data)
+        map_object = Map(Handle(map_addr))
+        in_object_properties_count = Map.get_in_object_properties_or_constructor_function_index(map_object.data)
+        instance_size = Map.get_instance_size(map_object.data)
+        # TODO: Handle UnboxedDoubleFields. Note that followed operation may fail
+        properties = to_dword(read(self.data, instance_size - in_object_properties_count * kPointerSize,
+                                   in_object_properties_count * kPointerSize), False)
+        return [str(smi_to_int(i)) if has_smi_tag(i) else '0x%x' % i for i in properties]
 
     def parse(self):
         """
@@ -1704,12 +1783,21 @@ class JSObject(JSReceiver):
 
         """
         self.do_parse()
-        field_count = self.get_internal_field_count(self.data)
+
         internal_fields = ['%d:\t0x%x' % (index, value) for index, value in
-                           enumerate(self.get_internal_fields(field_count))]
-        internal_fields_str = '\n\t'.join(internal_fields)
-        self.append('InternalFields (Count: %d, Size: 0x%x)\n\t%s' %
+                           enumerate(self.get_internal_fields())]
+        field_count = len(internal_fields)
+        internal_fields_str = '\n\t' * (field_count != 0) + '\n\t'.join(internal_fields)
+        self.append('InternalFields (Count: %d, Size: 0x%x)%s' %
                     (field_count, field_count * kPointerSize, internal_fields_str))
+
+        in_object_properties = ['%d:\t%s' % (index, value) for index, value in
+                                enumerate(self.get_in_object_properties())]
+        in_object_properties_count = len(in_object_properties)
+        in_object_properties_str = '\n\t' * (in_object_properties_count != 0) + '\n\t'.join(in_object_properties)
+        self.append('InObjectProperties (Count: %d, Size: 0x%x)%s' %
+                    (in_object_properties_count, in_object_properties_count * kPointerSize, in_object_properties_str))
+
         return self.result
 
     def do_parse(self):
@@ -2150,6 +2238,34 @@ class ExecutableAccessorInfo(AccessorInfo):
         self.append('kGetterAddr: 0x%x' % ExecutableAccessorInfo.get_getter_addr(self.data))
         self.append('kSetterAddr: 0x%x' % ExecutableAccessorInfo.get_setter_addr(self.data))
         self.append('kDataAddr: 0x%x' % ExecutableAccessorInfo.get_data_addr(self.data))
+
+
+class AccessorPair(Struct):
+    """
+    class AccessorPair: public Struct;
+    Support for JavaScript accessors: A pair of a getter and a setter. Each
+    accessor can either be
+      * a pointer to a JavaScript function or proxy: a real accessor
+      * undefined: considered an accessor by the spec, too, strangely enough
+      * the hole: an accessor which has not been set
+      * a pointer to a map: a transition used to ensure map sharing
+    """
+    kGetterOffset = HeapObject.kHeaderSize
+    kSetterOffset = kGetterOffset + kPointerSize
+    kSize = kSetterOffset + kPointerSize
+
+    @staticmethod
+    def get_getter_addr(data):
+        return get_dword(data, AccessorPair.kGetterOffset)
+
+    @staticmethod
+    def get_setter_addr(data):
+        return get_dword(data, AccessorPair.kSetterOffset)
+
+    def do_parse(self):
+        Struct.do_parse(self)
+        self.append('kGetterAddr: 0x%x' % AccessorPair.get_getter_addr(self.data))
+        self.append('kSetterAddr: 0x%x' % AccessorPair.get_setter_addr(self.data))
 
 
 class TemplateInfo(Struct):
