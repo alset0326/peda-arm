@@ -1090,17 +1090,18 @@ class PEDA(object):
             return []
 
         (arch, bits) = self.getarch()
-        pc = self.getpc()
-        prev_insts = self.prev_inst(pc, 12)
 
         code = ""
-        if not prev_insts:
-            return []
+        if argc is None:
+            pc = self.getpc()
+            prev_insts = self.prev_inst(pc, 12)
+            if not prev_insts:
+                return []
+            for (addr, inst) in prev_insts[::-1]:
+                if inst.strip().startswith('b'):
+                    break
+                code = "0x%x:%s\n" % (addr, inst) + code
 
-        for (addr, inst) in prev_insts[::-1]:
-            if inst.strip().startswith('b'):
-                break
-            code = "0x%x:%s\n" % (addr, inst) + code
         # tode 'elf32-littlearm'
         if "32" in arch:
             args = self._get_function_args_32(code, argc)
@@ -4017,12 +4018,11 @@ class PEDACmd(object):
         args = peda.get_syscall_args(num)
         if args:
             function_name, name, params_num, params, args = args
-            text = []
-            text.append(blue('System call:', 'bold'))
-            text.append('        %s' % function_name)
-            text.append(blue('Description:', 'bold'))
-            text.append('        %s' % name)
-            text.append(blue("Arguments:", 'bold'))
+            text = [blue('System call:', 'bold'),
+                    '        %s' % function_name,
+                    blue('Description:', 'bold'),
+                    '        %s' % name,
+                    blue("Arguments:", 'bold')]
             if params_num == 0:
                 text.append('        Argument None')
             else:
@@ -4041,7 +4041,7 @@ class PEDACmd(object):
         Display details at a system call instruction
         Usage:
             MYNAME num | syscall_name
-                nun: force to display "system call num" instead of figure out register r7
+                num: force to display "system call num" instead of figure out register r7
         """
         if SYSTEM_CALLS is None:
             return
@@ -5878,20 +5878,19 @@ class PEDACmd(object):
         if self._is_running() and address == peda.getpc():
             write_mode = exec_mode = True
 
-        line = peda.execute_redirect("show write")
-        if line and "on" in line.split()[-1]:
-            write_mode = True
-
         if address is None:
             write_mode = exec_mode = False
+        elif peda.is_address(address):
+            write_mode = True
 
         if write_mode:
-            msg("Instruction will be written to 0x%x" % address)
+            msg('Instruction will be written to 0x%x. '
+                'Command "set write on" can be used to patch the binary file.' % address)
         else:
             msg("Instructions will be written to stdout")
 
-        msg("Type instructions (%s syntax), one or more per line separated by \";\"" % red(mode.upper()))
-        msg("End with a line saying just \"end\"")
+        msg('Type instructions (%s syntax), one or more per line separated by ";".' % red(mode.upper()))
+        msg('End with a line saying just "end".')
 
         if not write_mode:
             address = 0xdeadbeef
@@ -5901,7 +5900,7 @@ class PEDACmd(object):
         # fetch instruction loop
         while True:
             try:
-                inst = input("iasm|0x%x> " % address)
+                inst = input("%s|0x%x> " % (mode, address))
             except EOFError:
                 msg('')
                 break
