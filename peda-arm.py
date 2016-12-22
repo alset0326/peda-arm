@@ -62,7 +62,7 @@ else:
 # tode
 REGISTERS = {
     32: ['r' + str(i) for i in range(13)] + 'sp lr pc'.split(),
-    64: []
+    64: ['x' + str(i) for i in range(31)] + 'sp pc'.split()
 }
 
 CPSR = ["T", "F", "I", "V", "C", "Z", "N"]
@@ -1367,7 +1367,7 @@ class PEDA(object):
         ) or (
                         cond == 'vc' and not flags['V']
         ) or (
-                        cond == 'hi' and (flags['C'] or not flags['Z'])
+                            cond == 'hi' and flags['C'] and not flags['Z']
         ) or (
                         cond == 'ls' and (not flags['C'] or flags['Z'])
         ) or (
@@ -1375,9 +1375,9 @@ class PEDA(object):
         ) or (
                         cond == 'lt' and flags['N'] != flags['V']
         ) or (
-                        cond == 'gt' and (not flags['Z'] or flags['N'] == flags['V'])
+                            cond == 'gt' and not flags['Z'] and flags['N'] == flags['V']
         ) or (
-                        cond == 'le' and (flags['Z'] or flags['N'] != flags['V'])
+                            cond == 'le' and flags['Z'] and flags['N'] != flags['V']
         ):
             return next_addr
         else:
