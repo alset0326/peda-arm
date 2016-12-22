@@ -3,6 +3,8 @@ peda-arm
 
 PEDA-ARM - Python Exploit Development Assistance for GDB
 
+longld's peda is amazing. But it cannot work on ARM, especially on Android. So I made some change.
+
 ## Key Features:
 * Enhance the display of gdb: colorize and display disassembly codes, registers, memory information during debugging.
 * Add commands to support debugging and exploit development (for a full list of commands use `peda help`):
