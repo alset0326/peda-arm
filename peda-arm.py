@@ -2243,7 +2243,8 @@ class PEDA(object):
         """
         result = []
         (v, t, vn) = self.examine_mem_value(value)
-        while vn is not None:
+        count = 0
+        while vn is not None and count < 8:
             result += [(v, t, vn)]
             if v == vn or to_int(v) == to_int(vn):  # point to self
                 break
@@ -2252,6 +2253,7 @@ class PEDA(object):
             if to_int(vn) in [to_int(v) for (v, _, _) in result]:  # point back to previous value
                 break
             (v, t, vn) = self.examine_mem_value(to_int(vn))
+            count += 1
 
         return result
 
