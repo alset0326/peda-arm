@@ -4063,7 +4063,7 @@ class PEDACmd(object):
             MYNAME address | function
         """
         (address,) = normalize_argv(arg, 1)
-        peda.set_breakpoint(address)
+        peda.set_breakpoint(address, temp=True)
         pc = peda.getpc()
         if pc is None:
             peda.execute("run")
