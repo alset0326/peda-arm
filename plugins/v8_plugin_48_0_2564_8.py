@@ -177,25 +177,25 @@ def decode_v8_value(v, bitness=32):
 
 
 def to_qword(data, unpack=True):
-    num = len(data) / kDoubleSize
+    num = len(data) // kDoubleSize
     result = struct.unpack('<' + 'Q' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
 
 def to_dword(data, unpack=True):
-    num = len(data) / kPointerSize
+    num = len(data) // kPointerSize
     result = struct.unpack('<' + 'I' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
 
 def to_byte(data, unpack=True):
-    num = len(data) / kCharSize
+    num = len(data) // kCharSize
     result = struct.unpack('<' + 'B' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
 
 def to_double(data, unpack=True):
-    num = len(data) / kDoubleSize
+    num = len(data) // kDoubleSize
     result = struct.unpack('<' + 'd' * num, data)
     return result[0] if unpack is True and num == 1 else result
 
@@ -466,7 +466,7 @@ class FixedArray(FixedArrayBase):
     # consumption.
     kMaxSize = 128 * MB * kPointerSize
     # Maximally allowed length of a FixedArray.
-    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) / kPointerSize
+    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) // kPointerSize
 
     def get_elements(self):
         length = FixedArray.get_length(self.data)
@@ -488,7 +488,7 @@ class FixedDoubleArray(FixedArrayBase):
     FixedDoubleArray describes fixed-sized arrays with element type double.
     """
     kMaxSize = 512 * MB
-    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) / kDoubleSize
+    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) // kDoubleSize
 
     def get_elements(self):
         length = FixedDoubleArray.get_length(self.data)
@@ -1478,7 +1478,7 @@ class ExternalString(String):
     kShortSize = kResourceOffset + kPointerSize
     kResourceDataOffset = kResourceOffset + kPointerSize
     kSize = kResourceDataOffset + kPointerSize
-    kMaxShortLength = (kShortSize - SeqString.kHeaderSize) / kCharSize
+    kMaxShortLength = (kShortSize - SeqString.kHeaderSize) // kCharSize
 
     @staticmethod
     def get_resource_addr(data):
@@ -2134,7 +2134,7 @@ class JSArray(JSObject):
     # # we do not want to include in objects.h
     # # Note that Page::kMaxRegularHeapObjectSize has to be in sync with
     # # kInitialMaxFastElementArray which is checked in a DCHECK in heap.cc.
-    # kInitialMaxFastElementArray = (600 * KB - FixedArray.kHeaderSize - kSize - AllocationMemento.kSize) / kPointerSize
+    # kInitialMaxFastElementArray = (600 * KB - FixedArray.kHeaderSize - kSize - AllocationMemento.kSize) // kPointerSize
 
     @staticmethod
     def get_length(data):
@@ -2724,4 +2724,4 @@ def invoke(peda_, *arg):
         warning('Cannot decode this value.')
 
 
-invoke.options = NAME_TO_TYPE.keys() + ['handle']
+invoke.options = list(NAME_TO_TYPE.keys()) + ['handle']

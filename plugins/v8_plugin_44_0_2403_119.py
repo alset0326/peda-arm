@@ -450,7 +450,7 @@ class FixedArray(FixedArrayBase):
     # consumption.
     kMaxSize = 128 * MB * kPointerSize
     # Maximally allowed length of a FixedArray.
-    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) / kPointerSize
+    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) // kPointerSize
 
     def get_elements(self):
         length = FixedArray.get_length(self.data)
@@ -476,7 +476,7 @@ class FixedDoubleArray(FixedArrayBase):
     FixedDoubleArray describes fixed-sized arrays with element type double.
     """
     kMaxSize = 512 * MB
-    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) / kDoubleSize
+    kMaxLength = (kMaxSize - FixedArrayBase.kHeaderSize) // kDoubleSize
 
 
 class ByteArray(FixedArrayBase):
@@ -1474,7 +1474,7 @@ class ExternalString(String):
     kShortSize = kResourceOffset + kPointerSize
     kResourceDataOffset = kResourceOffset + kPointerSize
     kSize = kResourceDataOffset + kPointerSize
-    kMaxShortLength = (kShortSize - SeqString.kHeaderSize) / kCharSize
+    kMaxShortLength = (kShortSize - SeqString.kHeaderSize) // kCharSize
 
     @staticmethod
     def get_resource_addr(data):

@@ -558,7 +558,7 @@ class PEDA(object):
         else:
             return self.execute("%s %s" % (cmd, location))
 
-    def set_breakpoint_redirect(self, location, temp=None, hard=None):
+    def set_breakpoint_redirect(self, location, temp=False, hard=False):
         """
         Wrapper for GDB break command
             - location: target function or address (String ot Int)
@@ -585,7 +585,7 @@ class PEDA(object):
         Args:
             - num: breakpoint number
 
-        Returns:0
+        Returns:
             - tuple (Num(Int), Type(String), Disp(Bool), Enb(Bool), Address(Int), What(String), commands(String))
         """
         out = self.execute_redirect("info breakpoints %d" % num)
@@ -1265,9 +1265,9 @@ class PEDA(object):
         else:
             return None
 
-    def set_cpsr(self, flagname, value=True):
+    def set_cpsr(self, flagname, value):
         """
-        Set/clear value of a flag register
+        Set/clear/toggle value of a flag register
 
         Returns:
             - True if success (Bool)
@@ -1285,7 +1285,7 @@ class PEDA(object):
         else:
             return False
 
-        if cpsr[CPSR[index]] != value:  # switch value
+        if value is None or cpsr[CPSR[index]] != value:  # switch value
             reg_cpsr = self.getreg("cpsr")
             reg_cpsr ^= CPSR_INDEX[index]
             result = self.execute("set $cpsr = 0x%x" % reg_cpsr)
@@ -1298,7 +1298,7 @@ class PEDA(object):
         Evaluate target address of an instruction, used for jumpto decision
 
         Args:
-            - inst: AMS instruction text (String)
+            - inst: ASM instruction text (String)
 
         Returns:
             - target address (Int)
@@ -1850,7 +1850,7 @@ class PEDA(object):
             tmp.close()
         if not out:  # try the slow way
             i = None
-            for i in xrange(len(buf)):
+            for i in range(len(buf)):
                 if not self.execute("set {char}0x%x = 0x%x" % (address + i, ord(buf[i]))):
                     return i
             return i + 1
@@ -1923,7 +1923,7 @@ class PEDA(object):
         length = min(len(mem), len(buf))
         result = {}
         lineno = 0
-        for i in xrange(length // line_len):
+        for i in range(length // line_len):
             diff = 0
             bytes_ = []
             for j in range(line_len):
@@ -2514,6 +2514,7 @@ class PEDA(object):
         vmap = self.get_vmmap(filename)
         elfbase = vmap[0][0] if vmap else 0
         tmpfd = tmpfile(is_binary_file=True)
+        # TODO ?
         self.execute('remote get %s %s' % (filename, tmpfd.name))
         if not os.path.exists(tmpfd.name):
             tmpfd.write('something')
@@ -3480,7 +3481,7 @@ class PEDACmd(object):
         """
 
         def ascii_char(ch):
-            if ord(ch) >= 0x20 and ord(ch) < 0x7e:
+            if 0x20 <= ord(ch) < 0x7e:
                 return chr(ord(ch))  # Ensure we return a str
             else:
                 return "."
@@ -6560,7 +6561,7 @@ info('registering commands.')
 msg('')
 
 if zlib:
-    with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'r') as f:
+    with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'rb') as f:
         logos = pickle.loads(zlib.decompress(f.read()))
     msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
     msg('alpha-0.3'.rjust(random.randint(10, len(logos) + 10)), 'red')
