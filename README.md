@@ -1,3 +1,4 @@
+
 peda-arm
 ====
 
@@ -5,29 +6,42 @@ PEDA-ARM - Python Exploit Development Assistance for GDB
 
 longld's peda is amazing. But it cannot work on ARM, especially on Android. So I made some change.
 
+Target ARM is still testing. AARCH64 is now under developing.
+
 ## Key Features:
-* Enhance the display of gdb: colorize and display disassembly codes, registers, memory information during debugging.
-* Add commands to support debugging and exploit development (for a full list of commands use `peda help`):
-  * `aslr` -- Show/set ASLR setting of GDB
-  * `checksec` -- Check for various security options of binary
-  * `dumpargs` -- Display arguments passed to a function when stopped at a call instruction
-  * `dumprop` -- Dump all ROP gadgets in specific memory range
-  * `elfheader` -- Get headers information from debugged ELF file
-  * `elfsymbol` -- Get non-debugging symbol information from an ELF file
-  * `lookup` -- Search for all addresses/references to addresses which belong to a memory range
-  * `patch` -- Patch memory start at an address with string/hexstring/int
-  * `pattern` -- Generate, search, or write a cyclic pattern to memory
-  * `procinfo` -- Display various info from /proc/pid/
-  * `pshow` -- Show various PEDA options and other settings
-  * `pset` -- Set various PEDA options and other settings
-  * `readelf` -- Get headers information from an ELF file
-  * `ropgadget` -- Get common ROP gadgets of binary or library
-  * `ropsearch` -- Search for ROP gadgets in memory
-  * `searchmem|find` -- Search for a pattern in memory; support regex search
-  * `shellcode` -- Generate or download common shellcodes.
-  * `skeleton` -- Generate python exploit code template
-  * `vmmap` -- Get virtual mapping address ranges of section(s) in debugged process
-  * `xormem` -- XOR a memory region with a key
+* Just support all commands on original PEDA (except the part of shellcode)
+* Use `help peda` to show all the peda help
+
+## Updated Features:
+* Add source code context (if it has source code)
+* Add system call detect
+* Support ARM style jump instructions (b*/cbz) detect
+* Support full arm/thumb assemble
+* Add plugin framework. Now you can write your own plugins easily based on peda command
+* Add multiple welcome logos (Your gdb need to support zlib)
+* Enhance display. Make the length of the separation lines auto detect (Image is too large to display. Just find out yourself)
+* Support both remote and local debug
+* And so many features that I don't remember
+
+## Screenshot
+
+![](https://cloud.githubusercontent.com/assets/16704510/23940225/0da3d678-099f-11e7-9625-a48e3d3cc2ff.png)
+
+---
+
+![](https://cloud.githubusercontent.com/assets/16704510/23940248/1ed125cc-099f-11e7-9c58-547078536ad1.png)
+
+---
+
+![](https://cloud.githubusercontent.com/assets/16704510/23940259/244e7950-099f-11e7-9c1f-ef43891b92cc.png)
+
+---
+
+![](https://cloud.githubusercontent.com/assets/16704510/23940267/2e246534-099f-11e7-8321-9031e8499ed1.png)
+
+---
+
+![](https://cloud.githubusercontent.com/assets/16704510/23940278/38fc846e-099f-11e7-8588-547f29c354f6.png)
 
 ## Installation
 
@@ -35,6 +49,7 @@ longld's peda is amazing. But it cannot work on ARM, especially on Android. So I
     git clone https://github.com/alset0326/peda-arm.git ~/peda-arm
     echo "source ~/peda-arm/peda-arm.py" >> ~/.gdbinit
     echo "DONE! debug your program with gdb and enjoy"
+    echo "If you have any suggestions please leave me a message"
 ```
 
-
+***Tips: These features are also supported on [my own peda repo](https://github.com/alset0326/peda)***
