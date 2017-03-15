@@ -24,7 +24,8 @@ def check_command(command):
 
 # external binaries, required for some commands
 # tode
-PREFIXES = "arm-none-eabi- arm-eabi- arm-androideabi- arm-none-linux-gnueabi- arm-linux-androideabi- arm-linux-android- arm-linux-eabi-"
+PREFIXES = "arm-none-eabi- arm-eabi- arm-androideabi- arm-none-linux-gnueabi- arm-linux-androideabi- " \
+           "arm-linux-android- arm-linux-eabi- arm-linux-gnueabi-"
 prefix = ''
 for i in PREFIXES.split():
     command = "which %sobjdump" % i
