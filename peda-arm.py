@@ -5059,6 +5059,7 @@ class PEDACmd(object):
         Usage:
             MYNAME
             MYNAME [set|clear] flagname
+            MYNAME [set|clear|toggle] flagname
         """
         # tode
 
@@ -5084,10 +5085,13 @@ class PEDACmd(object):
             msg("%s: 0x%x (%s)" % (green("CPSR"), cpsr, text.strip()))
 
         elif option == "set":
-            peda.set_cpsr(flagname.lower())
+            peda.set_cpsr(flagname.lower(), True)
 
         elif option == "clear":
             peda.set_cpsr(flagname, False)
+
+        elif option == 'toggle':
+            peda.set_cpsr(flagname, None)
 
         return
 
