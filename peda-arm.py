@@ -4851,6 +4851,32 @@ class PEDACmd(object):
             self._missing_argument()
         return
 
+    def writemem(self, *arg):
+        """
+        Write HEX raw to memory
+        Usage:
+            MYNAME address RAW
+        """
+        args = list(arg)
+        if len(args) == 1:
+            self._missing_argument()
+
+        address = to_int(args[0])
+        if address is not None:
+            mem = ''.join(args[1:])
+            if len(mem) % 2 == 1:
+                error("Odd-length hex string")
+                return
+            mem = mem.decode('hex')
+            bytes = peda.writemem(address, mem)
+            if bytes > 0:
+                info("Written %d bytes to 0x%x" % (bytes, address))
+            else:
+                warning("failed to write raw to memory")
+        else:
+            self._missing_argument()
+        return
+
     # cmpmem()
     def cmpmem(self, *arg):
         """
