@@ -83,9 +83,9 @@ CPSR_MODES = dict(zip(CPSR_M_INDEX, CPSR_M_TEXT))
 MSG_LEGEND = "Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata"))
 
 if zlib:
-    with open(os.path.dirname(PEDAFILE) + '/lib/system_calls', 'r') as f:
+    with open(os.path.dirname(PEDAFILE) + '/lib/system_calls', 'rb') as f:
         # {number:[function_name,name,params_num,[params...]]}
-        SYSTEM_CALLS = pickle.loads(zlib.decompress(f.read()))
+        SYSTEM_CALLS = pickle_loads(zlib.decompress(f.read()))
     info('Loading system calls.')
 else:
     SYSTEM_CALLS = None
@@ -6592,7 +6592,7 @@ msg('')
 
 if zlib:
     with open(os.path.dirname(PEDAFILE) + '/lib/logos', 'rb') as f:
-        logos = pickle.loads(zlib.decompress(f.read()))
+        logos = pickle_loads(zlib.decompress(f.read()))
     msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
     msg('alpha-0.3'.rjust(random.randint(10, len(logos) + 10)), 'red')
     msg('')

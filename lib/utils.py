@@ -27,17 +27,8 @@ import six
 from six import StringIO
 from six.moves import range
 from six.moves import input
-
-try:
-    reload is None
-except NameError:
-    try:
-        from importlib import reload
-    except ImportError:
-        try:
-            from imp import reload
-        except ImportError:
-            pass
+from six.moves import reload_module as reload
+from six.moves import cPickle as pickle
 
 
 # http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
@@ -954,3 +945,10 @@ def reload_module(name):
             module = sys.modules.get(name)
             return reload(module)
     return None
+
+
+def pickle_loads(s):
+    if six.PY3:
+        return pickle.loads(s, encoding='bytes')
+    else:
+        return pickle.loads(s)
