@@ -949,6 +949,6 @@ def reload_module(name):
 
 def pickle_loads(s):
     if six.PY3:
-        return pickle.loads(s, encoding='bytes')
+        return pickle.loads(s, encoding='iso-8859-1')
     else:
         return pickle.loads(s)
