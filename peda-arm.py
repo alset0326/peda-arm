@@ -4661,7 +4661,7 @@ class PEDACmd(object):
 
         # display source
         if 'source' in opt:
-            self.context_source()
+            self.context_source(count)
             need_footer = True
 
         # display assembly code
@@ -4670,7 +4670,7 @@ class PEDACmd(object):
             need_footer = True
 
         # display stack content, forced in case SIGSEGV
-        if "stack" in opt or "SIGSEGV" in status:
+        if "stack" in opt:
             self.context_stack(count)
             need_footer = True
 

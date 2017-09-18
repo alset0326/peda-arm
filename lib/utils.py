@@ -391,6 +391,8 @@ def to_int(val):
     """
     Convert a string to int number
     """
+    if val is None:
+        return None
     try:
         return int(str(val), 0)
     except:
