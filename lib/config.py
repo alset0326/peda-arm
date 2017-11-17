@@ -51,7 +51,7 @@ OPTIONS = {
     "tracelog": ("peda-trace-#FILENAME#.txt", "target file to save tracecall output"),
     "crashlog": ("peda-crashdump-#FILENAME#.txt", "target file to save crash dump of fuzzing"),
     "snapshot": ("peda-snapshot-#FILENAME#.raw", "target file to save crash dump of fuzzing"),
-    "autosave": ("on", "auto saving peda session, e.g: on|off"),
+    "autosave": ("off", "auto saving peda session, e.g: on|off"),
     "payload": ("peda-payload-#FILENAME#.txt", "target file to save output of payload command"),
     "context": ("register,source,code,stack", "context display setting, e.g: register, code, stack, all"),
     "verbose": ("off", "show detail execution of commands, e.g: on|off"),
