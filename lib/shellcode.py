@@ -19,7 +19,7 @@ from six.moves import range
 import sys
 
 import config
-from utils import msg, error_msg
+from peda_utils import msg, error_msg
 
 if sys.version_info.major is 3:
     from urllib.request import urlopen
@@ -371,7 +371,7 @@ class Shellcode():
         try:
             msg('Connection to OWASP ZSC API api.z3r0d4y.com')
             params = urlencode({
-                    'api_name': 'zsc', 
+                    'api_name': 'zsc',
                     'os': os,
                     'job': job,
                     'encode': encode})
