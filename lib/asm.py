@@ -11,7 +11,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-from utils import *
+from peda_utils import *
 import config
 
 if config.prefix == '':
