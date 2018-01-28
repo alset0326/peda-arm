@@ -1,16 +1,8 @@
 from sys import modules
 import os
 
-try:
-    reload is None
-except NameError:
-    try:
-        from importlib import reload
-    except ImportError:
-        try:
-            from imp import reload
-        except ImportError:
-            pass
+from lib.six.moves import reload_module as reload
+from lib.utils import import_plugin
 
 invoke = None
 
@@ -36,7 +28,7 @@ def main():
     except:
         print('Choosing default 0')
         choose = 0
-    module = __import__(plugins[choose])
+    module = import_plugin(plugins[choose])
     invoke = module.invoke
 
 

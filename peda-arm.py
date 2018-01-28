@@ -34,32 +34,22 @@ except ImportError:
 PEDAFILE = os.path.abspath(os.path.expanduser(__file__))
 if os.path.islink(PEDAFILE):
     PEDAFILE = os.readlink(PEDAFILE)
-sys.path.insert(0, os.path.dirname(PEDAFILE) + "/plugins/")
-sys.path.insert(0, os.path.dirname(PEDAFILE) + "/lib/")
+sys.path.insert(0, os.path.dirname(PEDAFILE))
 
-# Use six library to provide Python 2/3 compatibility
-import six
-from six.moves import range
-from six.moves import input
+from lib import six
+from lib.six.moves import range
+from lib.six.moves import input
+from lib.six.moves import cPickle as pickle
+from lib.six.moves import input
 
-try:
-    import six.moves.cPickle as pickle
-except ImportError:
-    import pickle
-
-from skeleton import *
-from shellcode import *
-from utils import *
-import config
-from asm import *
+from lib.skeleton import *
+from lib.shellcode import *
+from lib.utils import *
+from lib import config
+from lib.asm import *
 
 info('Loading components.')
 
-if sys.version_info.major is 3:
-    pyversion = 3
-else:
-    pyversion = 2
-# tode
 REGISTERS = {
     32: ['r' + str(i) for i in range(13)] + 'sp lr pc'.split(),
     64: ['x' + str(i) for i in range(31)] + 'sp pc'.split()
@@ -1347,37 +1337,37 @@ class PEDA(object):
 
         cond = match.group(2)
         if (
-                    cond == ''
+                cond == ''
         ) or (
-                    cond == 'al'
+                cond == 'al'
         ) or (
-                        cond == "eq" and flags["Z"]
+                cond == "eq" and flags["Z"]
         ) or (
-                        cond == "ne" and not flags["Z"]
+                cond == "ne" and not flags["Z"]
         ) or (
-                    (cond == 'cs' or cond == 'hs') and flags['C']
+                (cond == 'cs' or cond == 'hs') and flags['C']
         ) or (
-                    (cond == 'cc' or cond == 'lo') and not flags['C']
+                (cond == 'cc' or cond == 'lo') and not flags['C']
         ) or (
-                        cond == 'mi' and flags['N']
+                cond == 'mi' and flags['N']
         ) or (
-                        cond == 'pl' and not flags['N']
+                cond == 'pl' and not flags['N']
         ) or (
-                        cond == 'vs' and flags['V']
+                cond == 'vs' and flags['V']
         ) or (
-                        cond == 'vc' and not flags['V']
+                cond == 'vc' and not flags['V']
         ) or (
-                            cond == 'hi' and flags['C'] and not flags['Z']
+                cond == 'hi' and flags['C'] and not flags['Z']
         ) or (
-                        cond == 'ls' and (not flags['C'] or flags['Z'])
+                cond == 'ls' and (not flags['C'] or flags['Z'])
         ) or (
-                        cond == 'ge' and flags['N'] == flags['V']
+                cond == 'ge' and flags['N'] == flags['V']
         ) or (
-                        cond == 'lt' and flags['N'] != flags['V']
+                cond == 'lt' and flags['N'] != flags['V']
         ) or (
-                            cond == 'gt' and not flags['Z'] and flags['N'] == flags['V']
+                cond == 'gt' and not flags['Z'] and flags['N'] == flags['V']
         ) or (
-                            cond == 'le' and flags['Z'] and flags['N'] != flags['V']
+                cond == 'le' and flags['Z'] and flags['N'] != flags['V']
         ):
             return next_addr
         else:
@@ -1417,9 +1407,9 @@ class PEDA(object):
             next_addr = 0
 
         if (
-                        cond == 'z' and r == 0
+                cond == 'z' and r == 0
         ) or (
-                        cond == 'nz' and r != 0
+                cond == 'nz' and r != 0
         ):
             return next_addr
         else:
@@ -6120,10 +6110,7 @@ class PEDACmd(object):
                 while True:
                     for os in oslist:
                         msg('%s %s' % (yellow('[+]'), green(os)))
-                    if pyversion is 2:
-                        os = input('%s' % blue('os:'))
-                    if pyversion is 3:
-                        os = input('%s' % blue('os:'))
+                    os = input('%s' % blue('os:'))
                     if os in oslist:  # check if os exist
                         break
                     else:
@@ -6131,10 +6118,7 @@ class PEDACmd(object):
                 while True:
                     for job in joblist:
                         msg('%s %s' % (yellow('[+]'), green(job)))
-                    if pyversion is 2:
-                        job = raw_input('%s' % blue('job:'))
-                    if pyversion is 3:
-                        job = input('%s' % blue('job:'))
+                    job = input('%s' % blue('job:'))
                     if job != '':
                         break
                     else:
@@ -6142,10 +6126,7 @@ class PEDACmd(object):
                 while True:
                     for encode in encodelist:
                         msg('%s %s' % (yellow('[+]'), green(encode)))
-                    if pyversion is 2:
-                        encode = raw_input('%s' % blue('encode:'))
-                    if pyversion is 3:
-                        encode = input('%s' % blue('encode:'))
+                    encode = input('%s' % blue('encode:'))
                     if encode != '':
                         break
                     else:
@@ -6351,7 +6332,7 @@ class PEDACmd(object):
             self.plugin.__func__.options = []
             for f in os.listdir(os.path.dirname(PEDAFILE) + "/plugins/"):
                 if f.endswith('-plugin.py'):
-                    tmp = f[:-10]
+                    tmp = f.rstrip('-plugin.py')
                     self.plugin.__func__.options.append(tmp)
                     files.append(green(tmp) + red('*') if tmp in self.plugins else tmp)
             msg('\t'.join(files))
@@ -6361,7 +6342,7 @@ class PEDACmd(object):
                 warning('Please use "plugin %s reload" to force reload.)' % name)
                 return
             info('Plugin %s is reloading.' % name)
-            m = reload_module('%s-plugin' % name)
+            m = reload_plugin('%s-plugin' % name)
             if m is None or not hasattr(m, 'invoke') or not callable(getattr(m, 'invoke')):
                 error('Reload plugin failed. Please check the plugin file or restart gdb.')
                 return
@@ -6372,7 +6353,7 @@ class PEDACmd(object):
             if not os.path.exists(os.path.dirname(PEDAFILE) + "/plugins/%s-plugin.py" % name):
                 error('Plugin %s does not Exist!!' % name)
                 return
-            m = __import__('%s-plugin' % name)
+            m = import_plugin('%s-plugin' % name)
             if not hasattr(m, 'invoke') or not callable(getattr(m, 'invoke')):
                 error('Not a valid plugin file!')
                 return

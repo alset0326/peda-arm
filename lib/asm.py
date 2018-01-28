@@ -11,8 +11,9 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-from utils import *
-import config
+
+from lib.utils import *
+from lib import config
 
 if config.prefix == '':
     warning('Cross compile toolchain not found! You can install it from https://github.com/jsnyder/arm-eabi-toolchain')

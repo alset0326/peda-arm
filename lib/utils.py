@@ -20,15 +20,16 @@ import re
 import itertools
 import functools
 from subprocess import *
-import config
 import codecs
 
-import six
-from six import StringIO
-from six.moves import range
-from six.moves import input
-from six.moves import reload_module as reload
-from six.moves import cPickle as pickle
+from lib import six
+from lib.six import StringIO
+from lib.six.moves import range
+from lib.six.moves import input
+from lib.six.moves import reload_module as reload
+from lib.six.moves import cPickle as pickle
+
+from lib import config
 
 
 # http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
@@ -954,3 +955,11 @@ def pickle_loads(s):
         return pickle.loads(s, encoding='iso-8859-1')
     else:
         return pickle.loads(s)
+
+
+def import_plugin(name):
+    return __import__('plugins.' + name, fromlist=['plugins'])
+
+
+def reload_plugin(name):
+    reload_module('plugins.' + name)

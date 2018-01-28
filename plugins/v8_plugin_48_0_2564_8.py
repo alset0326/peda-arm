@@ -118,10 +118,10 @@
 """
 
 import struct
-import config
 import traceback
-from utils import *
 from v8_globals_48_0_2564_8 import *
+from lib import config
+from lib.utils import *
 
 
 def has_smi_tag(v):
@@ -917,7 +917,7 @@ class Map(HeapObject):
     kMaximumBitField2FastSmiElementValue = (ElementsKind.FAST_SMI_ELEMENTS + 1) << ElementsKindBits_kShift - 1
     kMaximumBitField2FastHoleyElementValue = (ElementsKind.FAST_HOLEY_ELEMENTS + 1) << ElementsKindBits_kShift - 1
     kMaximumBitField2FastHoleySmiElementValue = (
-                                                    ElementsKind.FAST_HOLEY_SMI_ELEMENTS + 1) << ElementsKindBits_kShift - 1
+                                                        ElementsKind.FAST_HOLEY_SMI_ELEMENTS + 1) << ElementsKindBits_kShift - 1
 
     # ------ kInstanceSizesOffset details ---------
     @staticmethod
