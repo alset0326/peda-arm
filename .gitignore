@@ -28,3 +28,4 @@ pip-log.txt
 .mr.developer.cfg
 
 .idea
+.gdb_history
