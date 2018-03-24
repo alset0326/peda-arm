@@ -29,15 +29,10 @@ except ImportError:
 __version__ = 'alpha-1.0'
 
 
-class Asm(object):
+class Asm(AsmBase):
     """
     Wrapper class for assemble/disassemble using as
     """
-    PREFIX = ''
-    READELF = ''
-    OBJDUMP = ''
-    OBJCOPY = ''
-    AS = ''
 
     def __init__(self):
         # Check cross compile toolchains
@@ -60,8 +55,7 @@ class Asm(object):
         self.OBJCOPY = '%sobjcopy' % prefix
         self.AS = '%sas' % prefix
 
-    @staticmethod
-    def assemble(asmcode, arch='arm'):
+    def assemble(self, asmcode, arch='arm'):
         """
         Assemble ASM instructions using AS
             - asmcode: input ASM instructions, multiple instructions are separated by ";" (String)
@@ -70,11 +64,11 @@ class Asm(object):
         Returns:
             - bin code (raw bytes)
         """
-        if Asm.PREFIX == '':
+        if self.PREFIX == '':
             warning('Cross compile toolchain not found! ')
             return
         # todo aarch64 and thumb64
-        gas = Asm.AS
+        gas = self.AS
         assemblers = {
             'arm': gas,
             'aarch64': '%s --64' % gas,
@@ -106,7 +100,7 @@ class Asm(object):
             return None
 
         outfd = tmpfile(is_binary_file=True)
-        objcopy = '%s -j .text -Obinary %s %s' % (Asm.OBJCOPY, elffd.name, outfd.name)
+        objcopy = '%s -j .text -Obinary %s %s' % (self.OBJCOPY, elffd.name, outfd.name)
         execute_external_command(objcopy)
         elffd.close()
         if not os.path.exists(outfd.name):
@@ -117,8 +111,7 @@ class Asm(object):
         outfd.close()
         return bincode
 
-    @staticmethod
-    def disassemble(buf, arch='arm'):
+    def disassemble(self, buf, arch='arm'):
         """
         Disassemble binary to ASM instructions using OBJCOPY OBJDUMP
             - buf: input binary (raw bytes)
@@ -127,7 +120,7 @@ class Asm(object):
         Returns:
             - ASM code (String)
         """
-        if Asm.PREFIX == '':
+        if self.PREFIX == '':
             warning('Cross compile toolchain not found! ')
             return
         # todo aarch64 and thumb64
@@ -137,8 +130,8 @@ class Asm(object):
         rawfd = tmpfile(is_binary_file=True)
         elffd = tmpfile(is_binary_file=True)
 
-        objdump = [Asm.OBJDUMP, '-d', '--adjust-vma', '0', '-b', 'elf32-littlearm']
-        objcopy = [Asm.OBJCOPY,
+        objdump = [self.OBJDUMP, '-d', '--adjust-vma', '0', '-b', 'elf32-littlearm']
+        objcopy = [self.OBJCOPY,
                    '-I', 'binary',
                    '-O', 'elf32-littlearm',
                    '-B', 'arm',
@@ -164,8 +157,7 @@ class Asm(object):
         result = out[1].strip('\n').rstrip().expandtabs()
         return result
 
-    @staticmethod
-    def format_shellcode(buf, arch='arm'):
+    def format_shellcode(self, buf, arch='arm'):
         """
         Format raw shellcode to disasm output display
             "\x6a\x01"  # 0x00000000:    push byte +0x1
@@ -173,10 +165,10 @@ class Asm(object):
 
         TODO: understand syscall numbers, socket call
         """
-        if Asm.PREFIX == '':
+        if self.PREFIX == '':
             warning('Cross compile toolchain not found! ')
             return
-        asmcode = Asm.disassemble(buf, arch)
+        asmcode = self.disassemble(buf, arch)
 
         if not asmcode:
             return ""
@@ -200,20 +192,13 @@ class Asm(object):
 
         return text
 
+    def objdump_disasm_search(self, name, search):
+        return execute_external_command(
+            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (self.OBJDUMP, name, search))
 
-info('Checking cross complie toolchains')
-Asm()
 
-info('Loading components.')
-
-if zlib:
-    with open(os.path.dirname(PEDAFILE) + '/peda/system_calls', 'rb') as f:
-        # {number:[function_name,name,params_num,[params...]]}
-        SYSTEM_CALLS = pickle_loads(zlib.decompress(f.read()))
-    info('Loading system calls.')
-else:
-    SYSTEM_CALLS = None
-    warning('zlib module not supported. Syscall lookup is disabled.')
+# Define syscall dict {number:[function_name,name,params_num,[params...]]}
+SYSTEM_CALLS = None
 
 # Define registers
 REGISTERS = {
@@ -896,7 +881,7 @@ class ArmPEDACmd(PEDACmd):
         if arch is None:
             (_, bits) = self.peda.getarch()
             arch = 'arm' if bits == 32 else 'aarch64'
-        return Asm.assemble(asmcode, arch)
+        return self.asm.assemble(asmcode, arch)
 
     def assemble(self, *arg):
         """
@@ -974,7 +959,7 @@ class ArmPEDACmd(PEDACmd):
             inst_code += bincode
             msg('hexify: "%s"' % to_hexstr(bincode))
 
-        text = Asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
+        text = self.asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
         if text:
             msg("Assembled%s instructions:" % ("/Executed" if exec_mode else ""))
             msg(text)
@@ -986,59 +971,72 @@ class ArmPEDACmd(PEDACmd):
 
 
 ###########################################################################
-## INITIALIZATION ##
-# global instances of PEDA() and PEDACmd()
-peda = PEDA(REGISTERS, Asm.OBJDUMP)
-pedacmd = ArmPEDACmd(peda, PEDAFILE)
-pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
-info('Loading peda main section.')
-# register "peda" command in gdb
-pedaGDBCommand(peda, pedacmd)
-Alias("pead", "peda")  # just for auto correction
+# INITIALIZATION #
+# global instances of PEDA() and PEDACmd() and Asm(). Maybe not global?
+asm = peda = pedacmd = None
 
-# create aliases for subcommands
-for cmd in pedacmd.commands:
-    func = getattr(pedacmd, cmd)
-    func.__func__.__doc__ = func.__doc__.replace("MYNAME", cmd)
-    if cmd not in ["help", "show", "set"]:
-        pedacmd._alias(cmd, cmd)
+if __name__ == '__main__':
+    info('Checking cross complie toolchains')
+    asm = Asm()
+    info('Init PEDA main section.')
+    peda = PEDA(REGISTERS, asm)
+    pedacmd = ArmPEDACmd(peda, PEDAFILE, asm)
+    pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
-# custom hooks
-peda.define_user_command("hook-stop", "peda context\nsession autosave")
+    # register "peda" command in gdb
+    info('Registering commands.')
+    pedaGDBCommand(peda, pedacmd)
+    Alias("pead", "peda")  # just for auto correction
 
-# custom command aliases, add any alias you want
-pedacmd._alias("phelp", "help")
-pedacmd._alias("pset", "set")
-pedacmd._alias("pshow", "show")
-pedacmd._alias("pbreak", "pltbreak")
-pedacmd._alias("pattc", "pattern_create")
-pedacmd._alias("patto", "pattern_offset")
-pedacmd._alias("patta", "pattern_arg")
-pedacmd._alias("patte", "pattern_env")
-pedacmd._alias("patts", "pattern_search")
-pedacmd._alias("find", "searchmem")  # override gdb find command
-pedacmd._alias("ftrace", "tracecall")
-pedacmd._alias("itrace", "traceinst")
-pedacmd._alias("jtrace", "traceinst j")
-pedacmd._alias("stack", "telescope $sp")
-pedacmd._alias("viewmem", "telescope")
-pedacmd._alias("reg", "xinfo register")
+    # create aliases for subcommands
+    for cmd in pedacmd.commands:
+        func = getattr(pedacmd, cmd)
+        func.__func__.__doc__ = func.__doc__.replace("MYNAME", cmd)
+        if cmd not in ["help", "show", "set"]:
+            pedacmd._alias(cmd, cmd, False)
 
-Alias("arm", "set arm force-mode arm")
-Alias("thumb", "set arm force-mode thumb")
-Alias("auto", "set arm force-mode auto")
+    # custom hooks
+    peda.define_user_command("hook-stop", "peda context\nsession autosave")
 
-PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
+    # custom command aliases, add any alias you want
+    pedacmd._alias("phelp", "help")
+    pedacmd._alias("pset", "set")
+    pedacmd._alias("pshow", "show")
+    pedacmd._alias("pbreak", "pltbreak")
+    pedacmd._alias("pattc", "pattern_create")
+    pedacmd._alias("patto", "pattern_offset")
+    pedacmd._alias("patta", "pattern_arg")
+    pedacmd._alias("patte", "pattern_env")
+    pedacmd._alias("patts", "pattern_search")
+    pedacmd._alias("find", "searchmem")  # override gdb find command
+    pedacmd._alias("ftrace", "tracecall")
+    pedacmd._alias("itrace", "traceinst")
+    pedacmd._alias("jtrace", "traceinst j")
+    pedacmd._alias("stack", "telescope $sp")
+    pedacmd._alias("viewmem", "telescope")
+    pedacmd._alias("reg", "xinfo register")
 
-info('registering commands.')
-msg('')
+    Alias("arm", "set arm force-mode arm")
+    Alias("thumb", "set arm force-mode thumb")
+    Alias("auto", "set arm force-mode auto")
 
-if zlib:
-    with open(os.path.dirname(PEDAFILE) + '/peda/logos', 'rb') as f:
-        logos = pickle_loads(zlib.decompress(f.read()))
-    msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
-    msg(__version__.rjust(random.randint(10, len(logos) + 10)), 'red')
-    msg('')
-else:
-    msg(('PEDA-ARM ' + __version__).rjust(random.randint(10, 50)), 'red')
-    msg('')
+    PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
+
+    # Check syscalls
+    if zlib:
+        info('Loading system calls.')
+        with open(os.path.dirname(PEDAFILE) + '/peda/system_calls', 'rb') as f:
+            # {number:[function_name,name,params_num,[params...]]}
+            SYSTEM_CALLS = pickle_loads(zlib.decompress(f.read()))
+    else:
+        warning('zlib module not supported. Syscall lookup is disabled.')
+
+    # Check logos
+    if zlib:
+        with open(os.path.dirname(PEDAFILE) + '/peda/logos', 'rb') as f:
+            logos = pickle_loads(zlib.decompress(f.read()))
+        msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
+        msg(__version__.rjust(random.randint(10, len(logos) + 10)), 'red')
+    else:
+        msg(('PEDA-ARM ' + __version__).rjust(random.randint(10, 50)), 'red')
+    msg(os.linesep)

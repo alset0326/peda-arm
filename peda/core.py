@@ -23,6 +23,7 @@ import random
 import struct
 import fcntl
 import termios
+import abc
 import gdb  # for ide
 
 from peda import six
@@ -37,7 +38,13 @@ from peda.utils import *
 from peda import config
 from peda.asm import *
 
-__all__ = ['PEDA', 'PEDACmd', 'PEDACmdAlias', 'PluginCommand', 'Alias', 'pedaGDBCommand']
+__all__ = ['PEDA', 'PEDACmd', 'PEDACmdAlias', 'PluginCommand', 'Alias', 'pedaGDBCommand', 'AsmBase']
+
+
+class AsmBase:
+    def objdump_disasm_search(self, name, search):
+        """for xref used"""
+        raise NotImplemented()
 
 
 ###########################################################################
@@ -46,10 +53,10 @@ class PEDA(object):
     Class for actual functions of PEDA commands
     """
 
-    def __init__(self, registers, objdump):
+    def __init__(self, registers, asm):
         self.SAVED_COMMANDS = {}  # saved GDB user's commands
         self.registers = registers  # for parse and eval used
-        self.objdump = objdump  # for xref used
+        self.asm = asm  # for xref used
 
     ####################################
     #   GDB Interaction / Misc Utils   #
@@ -904,8 +911,7 @@ class PEDA(object):
         else:
             name = filename
 
-        out = execute_external_command(
-            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (self.objdump, name, search))
+        out = self.asm.objdump_disasm_search(name, search)
         if self.is_target_remote():
             tmpfd.close()
 
@@ -2340,9 +2346,10 @@ class PEDACmd(object):
     MSG_LEGEND = "Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata"))
     commands = []
 
-    def __init__(self, peda, running_file_path):
+    def __init__(self, peda, running_file_path, asm):
         self.peda = peda
         self.pedafile = running_file_path  # for reload
+        self.asm = asm  # for asm support
         # list of all available commands
         self.commands = [c for c in dir(self) if callable(getattr(self, c)) and not c.startswith("_")]
         self.width = 78
@@ -4128,18 +4135,18 @@ class PEDACmd(object):
             self._missing_argument()
 
         if not filename:
-            filename = peda.get_config_filename("snapshot")
+            filename = self.peda.get_config_filename("snapshot")
 
         if opt == "save":
-            if peda.save_snapshot(filename):
+            if self.peda.save_snapshot(filename):
                 msg("Saved process's snapshot to filename '%s'" % filename)
             else:
                 msg("Failed to save process's snapshot")
 
         if opt == "restore":
-            if peda.restore_snapshot(filename):
+            if self.peda.restore_snapshot(filename):
                 msg("Restored process's snapshot from filename '%s'" % filename)
-                peda.execute("stop")
+                self.peda.execute("stop")
             else:
                 msg("Failed to restore process's snapshot")
 
@@ -4274,7 +4281,7 @@ class PEDACmd(object):
     plugin.options = [i[:-10] for i in os.listdir(os.path.dirname(__file__) + "/../plugins/") if
                       i.endswith('-plugin.py')]
 
-    def _alias(self, alias, command, shorttext=False):
+    def _alias(self, alias, command, shorttext=True):
         return PEDACmdAlias(self, alias, command, shorttext)
 
 
