@@ -10,33 +10,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import codecs
-import os
-import re
 import shlex
-import signal
-import string
-import sys
 import time
-import traceback
-import random
-import struct
 import fcntl
 import termios
-import abc
 import gdb  # for ide
 
-from peda import six
-from peda.six.moves import range
-from peda.six.moves import input
-from peda.six.moves import cPickle as pickle
-from peda.six.moves import input
+from .six.moves import range
+from .six.moves import cPickle as pickle
+from .six.moves import input
 
-from peda.skeleton import *
-from peda.shellcode import *
-from peda.utils import *
-from peda import config
-from peda.asm import *
+from .utils import *
+from . import config
 
 __all__ = ['PEDA', 'PEDACmd', 'PEDACmdAlias', 'PluginCommand', 'Alias', 'pedaGDBCommand', 'AsmBase']
 

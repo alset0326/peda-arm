@@ -5,6 +5,3 @@ from __future__ import print_function
 from .core import *
 from .config import *
 from .utils import *
-
-from .skeleton import *
-from .shellcode import *

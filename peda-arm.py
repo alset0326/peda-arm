@@ -11,6 +11,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import random
 import sys
 
 # point to absolute path of peda.py
@@ -1025,7 +1026,7 @@ if __name__ == '__main__':
     # Check syscalls
     if zlib:
         info('Loading system calls.')
-        with open(os.path.dirname(PEDAFILE) + '/peda/system_calls', 'rb') as f:
+        with open(os.path.dirname(PEDAFILE) + '/peda/arm/system_calls', 'rb') as f:
             # {number:[function_name,name,params_num,[params...]]}
             SYSTEM_CALLS = pickle_loads(zlib.decompress(f.read()))
     else:
@@ -1033,7 +1034,7 @@ if __name__ == '__main__':
 
     # Check logos
     if zlib:
-        with open(os.path.dirname(PEDAFILE) + '/peda/logos', 'rb') as f:
+        with open(os.path.dirname(PEDAFILE) + '/peda/arm/logos', 'rb') as f:
             logos = pickle_loads(zlib.decompress(f.read()))
         msg(logos[random.randint(0, len(logos) - 1)], 'blue', 'bold')
         msg(__version__.rjust(random.randint(10, len(logos) + 10)), 'red')
