@@ -654,7 +654,7 @@ class IntelPEDACmd(PEDACmd):
             - (status, address of target jumped instruction)
         """
 
-        flags = self.peda.get_eflags()
+        flags = self._get_eflags()
         if not flags:
             return None
 
