@@ -2000,7 +2000,7 @@ class IntelPEDACmd(PEDACmd):
 asm = peda = pedacmd = None
 
 if __name__ == '__main__':
-    info('Checking cross complie toolchains')
+    info('Checking complie toolchains')
     asm = Nasm()
     info('Init PEDA main section.')
     peda = PEDA(REGISTERS, asm)

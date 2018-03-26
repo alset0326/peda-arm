@@ -799,7 +799,7 @@ def _decode_string_escape_py3(str_):
 
 def decode_string_escape(str_):
     """Generic Python string escape"""
-    raise Exception('Should be overriden')
+    raise NotImplementedError('Should be overriden')
 
 
 def bytes_iterator(bytes_):
