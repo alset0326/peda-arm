@@ -1,8 +1,8 @@
 from sys import modules
 import os
 
-from lib.six.moves import reload_module as reload
-from lib.utils import import_plugin
+from peda.six.moves import reload_module as reload
+from peda.utils import import_plugin
 
 invoke = None
 
