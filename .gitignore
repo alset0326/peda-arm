@@ -29,3 +29,5 @@ pip-log.txt
 
 .idea
 .gdb_history
+
+plugins/libheap
