@@ -119,6 +119,10 @@ class Nasm(AsmBase):
         out = execute_external_command("%s -b %d -" % (Nasm.NDISASM, mode), buf)
         return nasm2shellcode(out)
 
+    def objdump_disasm_search(self, name, search):
+        return execute_external_command(
+            "%s -M intel -z --prefix-address -d '%s' | grep '%s'" % (self.OBJDUMP, name, search))
+
 
 # Define registers
 
@@ -2008,7 +2012,6 @@ if __name__ == '__main__':
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
     # register "peda" command in gdb
-    info('Registering commands.')
     pedaGDBCommand(peda, pedacmd)
     Alias("pead", "peda")  # just for auto correction
 
