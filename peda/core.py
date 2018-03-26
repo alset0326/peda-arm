@@ -14,6 +14,7 @@ import shlex
 import time
 import fcntl
 import termios
+import traceback
 import gdb  # for ide
 
 from .six.moves import range
@@ -2062,6 +2063,81 @@ class PEDA(object):
         return result
 
     @memoized
+    def elfheader_solib(self, solib=None, name=None):
+        """
+        Get headers information of Shared Object Libraries linked to target
+
+        Args:
+            - solib: shared library name (String)
+            - name: specific header name (String)
+
+        Returns:
+            - dictionary of headers {name(String): start(Int), end(Int), type(String))
+        """
+        # hardcoded ELF header type
+        # todo
+        header_type = {"code": [".text", ".fini", ".init", ".plt", "__libc_freeres_fn"],
+                       "data": [".dynamic", ".data", ".ctors", ".dtors", ".jrc", ".got", ".got.plt",
+                                ".bss", ".tdata", ".tbss", ".data.rel.ro", ".fini_array",
+                                "__libc_subfreeres", "__libc_thread_subfreeres"]
+                       }
+
+        @memoized
+        def _elfheader_solib_all():
+            out = PEDA.execute_redirect("info files")
+            if not out:
+                return None
+
+            p = re.compile("^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
+            soheaders = p.findall(out)
+
+            result = []
+            for (start, end, hname, libname) in soheaders:
+                start, end = to_int(start), to_int(end)
+                result += [
+                    (start, end, hname, os.path.realpath(libname))]  # tricky, return the realpath version of libraries
+            return result
+
+        elfinfo = {}
+
+        headers = _elfheader_solib_all()
+        if not headers:
+            return {}
+
+        if solib is None:
+            return headers
+
+        vmap = self.get_vmmap(solib)
+        elfbase = vmap[0][0] if vmap else 0
+
+        for (start, end, hname, libname) in headers:
+            if solib in libname:
+                # if PIE binary or DSO, update with runtime address
+                if start < elfbase:
+                    start += elfbase
+                if end < elfbase:
+                    end += elfbase
+                # determine the type
+                htype = "rodata"
+                if hname in header_type["code"]:
+                    htype = "code"
+                elif hname in header_type["data"]:
+                    htype = "data"
+                elfinfo[hname.strip()] = (start, end, htype)
+
+        result = {}
+        if name is None:
+            result = elfinfo
+        else:
+            if name in elfinfo:
+                result[name] = elfinfo[name]
+            else:
+                for (k, v) in elfinfo.items():
+                    if name in k:
+                        result[k] = v
+        return result
+
+    @memoized
     def elfsymbols(self, pattern=None):
         """
         Get all non-debugging symbol information of debugged ELF file
@@ -2188,139 +2264,6 @@ class PEDA(object):
                 if addr:
                     return to_int(addr.group(1))
         return None
-
-    @memoized
-    def readelf_header(self, filename, name=None):
-        """
-        Get headers information of an ELF file using 'readelf'
-
-        Args:
-            - filename: ELF file (String)
-            - name: specific header name (String)
-
-        Returns:
-            - dictionary of headers (name(String), value(Int)) (Dict)
-        """
-        elfinfo = {}
-        vmap = self.get_vmmap(filename)
-        elfbase = vmap[0][0] if vmap else 0
-        tmpfd = tmpfile(is_binary_file=True)
-        # TODO ?
-        PEDA.execute('remote get %s %s' % (filename, tmpfd.name))
-        if not os.path.exists(tmpfd.name):
-            tmpfd.write('something')
-            tmpfd.close()
-            return {}
-        out = execute_external_command("%s -W -S %s" % (config.READELF, filename))
-        if not out:
-            return {}
-        p = re.compile("^ *\[ *\d*\] +(\S+) +\S+ +(\S+) +\S+ +(\S*)(.*)$", re.M)
-        matches = p.findall(out)
-        if not matches:
-            return None
-
-        for (hname, start, size, attr) in matches:
-            start, end = to_int("0x" + start), to_int("0x" + start) + to_int("0x" + size)
-            # if PIE binary or DSO, update with runtime address
-            if start < elfbase:
-                start += elfbase
-            if end < elfbase:
-                end += elfbase
-
-            if "X" in attr:
-                htype = "code"
-            elif "W" in attr:
-                htype = "data"
-            else:
-                htype = "rodata"
-            elfinfo[hname.strip()] = (start, end, htype)
-
-        result = {}
-        if name is None:
-            result = elfinfo
-        else:
-            if name in elfinfo:
-                result[name] = elfinfo[name]
-            else:
-                for (k, v) in elfinfo.items():
-                    if name in k:
-                        result[k] = v
-        return result
-
-    @memoized
-    def elfheader_solib(self, solib=None, name=None):
-        """
-        Get headers information of Shared Object Libraries linked to target
-
-        Args:
-            - solib: shared library name (String)
-            - name: specific header name (String)
-
-        Returns:
-            - dictionary of headers {name(String): start(Int), end(Int), type(String))
-        """
-        # hardcoded ELF header type
-        # todo
-        header_type = {"code": [".text", ".fini", ".init", ".plt", "__libc_freeres_fn"],
-                       "data": [".dynamic", ".data", ".ctors", ".dtors", ".jrc", ".got", ".got.plt",
-                                ".bss", ".tdata", ".tbss", ".data.rel.ro", ".fini_array",
-                                "__libc_subfreeres", "__libc_thread_subfreeres"]
-                       }
-
-        @memoized
-        def _elfheader_solib_all():
-            out = PEDA.execute_redirect("info files")
-            if not out:
-                return None
-
-            p = re.compile("^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
-            soheaders = p.findall(out)
-
-            result = []
-            for (start, end, hname, libname) in soheaders:
-                start, end = to_int(start), to_int(end)
-                result += [
-                    (start, end, hname, os.path.realpath(libname))]  # tricky, return the realpath version of libraries
-            return result
-
-        elfinfo = {}
-
-        headers = _elfheader_solib_all()
-        if not headers:
-            return {}
-
-        if solib is None:
-            return headers
-
-        vmap = self.get_vmmap(solib)
-        elfbase = vmap[0][0] if vmap else 0
-
-        for (start, end, hname, libname) in headers:
-            if solib in libname:
-                # if PIE binary or DSO, update with runtime address
-                if start < elfbase:
-                    start += elfbase
-                if end < elfbase:
-                    end += elfbase
-                # determine the type
-                htype = "rodata"
-                if hname in header_type["code"]:
-                    htype = "code"
-                elif hname in header_type["data"]:
-                    htype = "data"
-                elfinfo[hname.strip()] = (start, end, htype)
-
-        result = {}
-        if name is None:
-            result = elfinfo
-        else:
-            if name in elfinfo:
-                result[name] = elfinfo[name]
-            else:
-                for (k, v) in elfinfo.items():
-                    if name in k:
-                        result[k] = v
-        return result
 
 
 ###########################################################################

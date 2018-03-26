@@ -790,86 +790,14 @@ class ArmPEDACmd(PEDACmd):
 
         super(ArmPEDACmd, self).xinfo(*arg)
         if str(address).startswith("r"):
-            self.cpsr()
+            if regname is None or "cpsr" in regname:
+                self.cpsr()
 
     xinfo.options = ["register"]
 
     ###############################
     #   Exploit Helper Commands   #
     ###############################
-    # elfheader()
-    def elfheader(self, *arg):
-        """
-        Get headers information from debugged ELF file
-        Usage:
-            MYNAME [header_name]
-        """
-
-        (name,) = normalize_argv(arg, 1)
-        result = peda.elfheader(name)
-        if len(result) == 0:
-            warning("%s not found, did you specify the FILE to debug?" % (name if name else "headers"))
-        elif len(result) == 1:
-            (k, (start, end, type)) = list(result.items())[0]
-            msg("%s: 0x%x - 0x%x (%s)" % (k, start, end, type))
-        else:
-            for (k, (start, end, type)) in sorted(result.items(), key=lambda x: x[1]):
-                msg("%s = 0x%x" % (k, start))
-        return
-
-    # readelf_header(), elfheader_solib()
-    def readelf(self, *arg):
-        """
-        Get headers information from an ELF file
-        Usage:
-            MYNAME mapname [header_name]
-            MYNAME filename [header_name]
-        """
-
-        (filename, hname) = normalize_argv(arg, 2)
-        # result = {}
-        # maps = peda.get_vmmap()
-        if filename is None:  # fallback to elfheader()
-            result = peda.elfheader()
-        else:
-            result = peda.elfheader_solib(filename, hname)
-
-        if not result:
-            result = peda.readelf_header(filename, hname)
-        if len(result) == 0:
-            warning("%s or %s not found" % (filename, hname))
-        elif len(result) == 1:
-            (k, (start, end, type)) = list(result.items())[0]
-            msg("%s: 0x%x - 0x%x (%s)" % (k, start, end, type))
-        else:
-            for (k, (start, end, type)) in sorted(result.items(), key=lambda x: x[1]):
-                msg("%s = 0x%x" % (k, start))
-        return
-
-    # elfsymbol()
-    def elfsymbol(self, *arg):
-        """
-        Get non-debugging symbol information from an ELF file
-        Usage:
-            MYNAME symbol_name
-        """
-        (name,) = normalize_argv(arg, 1)
-        if not peda.getfile():
-            warning("please specify a file to debug")
-            return
-
-        result = peda.elfsymbol(name)
-        if len(result) == 0:
-            msg("'%s': no match found" % (name if name else "plt symbols"))
-        else:
-            if ("%s@got" % name) not in result:
-                msg("Found %d symbols" % len(result))
-            else:
-                msg("Detail symbol info")
-            for (k, v) in sorted(result.items(), key=lambda x: x[1]):
-                msg("%s = %s" % (k, "0x%x" % v if v else repr(v)))
-        return
-
     @memoized
     def _assemble(self, asmcode, arch=None):
         """
@@ -1010,9 +938,6 @@ if __name__ == '__main__':
     pedacmd._alias("patte", "pattern_env")
     pedacmd._alias("patts", "pattern_search")
     pedacmd._alias("find", "searchmem")  # override gdb find command
-    pedacmd._alias("ftrace", "tracecall")
-    pedacmd._alias("itrace", "traceinst")
-    pedacmd._alias("jtrace", "traceinst j")
     pedacmd._alias("stack", "telescope $sp")
     pedacmd._alias("viewmem", "telescope")
     pedacmd._alias("reg", "xinfo register")
@@ -1023,6 +948,8 @@ if __name__ == '__main__':
 
     PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
 
+    info('Registering commands.')
+    msg('')
     # Check syscalls
     if zlib:
         info('Loading system calls.')
