@@ -320,27 +320,30 @@ class IntelPEDACmd(PEDACmd):
 
         # just retrieve max 6 args
         arg_order = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
-        p = re.compile(":\s*([^ ]*)\s*(.*),")
-        matches = p.findall(code)
-        regs = [r for (_, r) in matches]
-        p = re.compile(("di|si|dx|cx|r8|r9"))
-        m = p.findall(" ".join(regs))
-        m = list(set(m))  # uniqify
-        argc = 0
-        if "si" in m and "di" not in m:  # dirty fix
-            argc += 1
-        argc += m.count("di")
-        if argc > 0:
-            argc += m.count("si")
-        if argc > 1:
-            argc += m.count("dx")
-        if argc > 2:
-            argc += m.count("cx")
-        if argc > 3:
-            argc += m.count("r8")
-        if argc > 4:
-            argc += m.count("r9")
 
+        if not argc:
+            p = re.compile(":\s*([^ ]*)\s*(.*),")
+            matches = p.findall(code)
+            regs = [r for (_, r) in matches]
+            p = re.compile("di|si|dx|cx|r8|r9")
+            m = p.findall(" ".join(regs))
+            m = list(set(m))  # uniqify
+            argc = 0
+            if "si" in m and "di" not in m:  # dirty fix
+                argc += 1
+            argc += m.count("di")
+            if argc > 0:
+                argc += m.count("si")
+            if argc > 1:
+                argc += m.count("dx")
+            if argc > 2:
+                argc += m.count("cx")
+            if argc > 3:
+                argc += m.count("r8")
+            if argc > 4:
+                argc += m.count("r9")
+
+        argc = min(argc, 6)
         if argc == 0:
             return []
 
