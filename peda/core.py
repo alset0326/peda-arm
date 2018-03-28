@@ -4175,7 +4175,7 @@ class PEDACmd(object):
             self.plugin.__func__.options = []
             for f in os.listdir(os.path.dirname(self.pedafile) + "/plugins/"):
                 if f.endswith('-plugin.py'):
-                    tmp = f.rstrip('-plugin.py')
+                    tmp = f[:-10]
                     self.plugin.__func__.options.append(tmp)
                     files.append(green(tmp) + red('*') if tmp in self.plugins else tmp)
             msg('\t'.join(files))
