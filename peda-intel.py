@@ -375,17 +375,17 @@ class IntelPEDACmd(PEDACmd):
             return []
 
         (arch, bits) = self.peda.getarch()
-        pc = self.peda.getreg("pc")
-        prev_insts = self.peda.prev_inst(pc, 12)
 
         code = ""
-        if not prev_insts:
-            return []
-
-        for (addr, inst) in prev_insts[::-1]:
-            if "call" in inst.strip().split()[0]:
-                break
-            code = "0x%x:%s\n" % (addr, inst) + code
+        if argc is None:
+            pc = self.peda.getreg("pc")
+            prev_insts = self.peda.prev_inst(pc, 12)
+            if not prev_insts:
+                return []
+            for (addr, inst) in prev_insts[::-1]:
+                if "call" in inst.strip().split()[0]:
+                    break
+                code = "0x%x:%s\n" % (addr, inst) + code
 
         if "i386" in arch:
             args = self._get_function_args_32(code, argc)
