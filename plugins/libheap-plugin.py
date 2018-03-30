@@ -28,7 +28,7 @@ except ImportError:
 def invoke(peda, *arg):
     update, = normalize_argv(arg, 1)
 
-    if update.startswith('u'):
+    if update is not None and update.startswith('u'):
         cmd = ' '.join(['cd', libheappath, ';', 'git', 'pull', '--all'])
         err = subprocess.call(cmd, shell=True)
         if err != 0:
