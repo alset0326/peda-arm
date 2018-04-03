@@ -1012,7 +1012,7 @@ class IntelPEDACmd(PEDACmd):
         result["FORTIFY"] = 0
 
         if filename is None:
-            filename = self.getfile()
+            filename = self.peda.getfile()
 
         if not filename:
             return None
