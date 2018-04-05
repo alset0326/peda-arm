@@ -1478,7 +1478,7 @@ class IntelPEDACmd(PEDACmd):
         """
 
         (mapname,) = normalize_argv(arg, 1)
-        result = self.peda.common_rop_gadget(mapname)
+        result = self._common_rop_gadget(mapname)
         if not result:
             msg("Not found")
         else:
@@ -1563,9 +1563,9 @@ class IntelPEDACmd(PEDACmd):
             maps = self.peda.get_vmmap(mapname)
             for (start, end, _, _) in maps:
                 if not self.peda.is_executable(start, maps): continue
-                result += self.peda.search_jmpcall(start, end, reg)
+                result += self._search_jmpcall(start, end, reg)
         else:
-            result = self.peda.search_jmpcall(start, end, reg)
+            result = self._search_jmpcall(start, end, reg)
 
         if not result:
             msg("Not found")
@@ -1710,7 +1710,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME generate [arch/]platform type [port] [host]
             MYNAME search keyword (use % for any character wildcard)
             MYNAME display shellcodeId (shellcodeId as appears in search results)
-	        MYNAME zsc [generate customize shellcode]
+            MYNAME zsc [generate customize shellcode]
 
             For generate option:
                 default port for bindport shellcode: 16706 (0x4142)
