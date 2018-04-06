@@ -3446,7 +3446,7 @@ class PEDACmd(object):
             if len(mem) % 2 == 1:
                 error("Odd-length hex string")
                 return
-            mem = mem.decode('hex')
+            mem = codecs.decode(mem, 'hex')
             bytes = self.peda.writemem(address, mem)
             if bytes > 0:
                 info("Written %d bytes to 0x%x" % (bytes, address))
