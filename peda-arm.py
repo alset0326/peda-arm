@@ -948,8 +948,6 @@ if __name__ == '__main__':
 
     PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
 
-    info('Registering commands.')
-    msg('')
     # Check syscalls
     if zlib:
         info('Loading system calls.')
@@ -960,6 +958,8 @@ if __name__ == '__main__':
         warning('zlib module not supported. Syscall lookup is disabled.')
 
     # Check logos
+    msg('')
+
     if zlib:
         with open(os.path.dirname(PEDAFILE) + '/peda/arm/logos', 'rb') as f:
             logos = pickle_loads(zlib.decompress(f.read()))
