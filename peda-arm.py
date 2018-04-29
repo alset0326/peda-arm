@@ -471,7 +471,7 @@ class ArmPEDACmd(PEDACmd):
             - (status, address of target jumped instruction)
         """
 
-        flags = self.peda.get_cpsr()
+        flags = self._get_cpsr()
         if not flags:
             return None
 
@@ -537,7 +537,7 @@ class ArmPEDACmd(PEDACmd):
             - (status, address of target jumped instruction)
         """
 
-        flags = self.peda.get_cpsr()
+        flags = self._get_cpsr()
         if not flags:
             return None
 
@@ -713,7 +713,7 @@ class ArmPEDACmd(PEDACmd):
         """
 
         # tode like above
-        cpsr = self.peda.get_cpsr()
+        cpsr = self._get_cpsr()
         if not cpsr:
             return False
 
@@ -827,7 +827,7 @@ class ArmPEDACmd(PEDACmd):
 
         (arch, bits) = peda.getarch()
         if mode is None:
-            cpsr = self.peda.get_cpsr()
+            cpsr = self._get_cpsr()
             if not cpsr:
                 error('Not attached. Need to specify a MODE!')
                 mode = 'error'
