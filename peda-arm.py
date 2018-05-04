@@ -47,7 +47,7 @@ class Asm(AsmBase):
                 break
         if prefix == '':
             warning('Cross compile toolchain not found! '
-                    'You can install it from https://github.com/jsnyder/arm-eabi-toolchain')
+                    'You can install it from https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads')
             return
 
         self.PREFIX = prefix
