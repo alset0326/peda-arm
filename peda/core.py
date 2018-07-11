@@ -404,13 +404,8 @@ class PEDA(object):
         Returns:
             - tuple of architecture info (arch (String), bits (Int))
         """
-        arch = "unknown"
+        arch = gdb.selected_frame().architecture().name()
         bits = 32
-        out = PEDA.execute_redirect('maintenance info sections ?').splitlines()
-        for line in out:
-            if "file type" in line:
-                arch = line.split()[-1][:-1]
-                break
         if "64" in arch:
             bits = 64
         return arch, bits
