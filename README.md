@@ -4,6 +4,8 @@ peda-arm
 
 PEDA-ARM - Python Exploit Development Assistance for GDB
 
+Finally, we merged the original peda and peda-arm. Use `peda-intel.py` to the original peda, and `peda-arm.py` to the new arm peda.
+
 longld's peda is amazing. But it cannot work on ARM, especially on Android. So I made some change.
 
 Target ARM is still testing. AARCH64 is now under developing.
