@@ -803,7 +803,7 @@ class ArmPEDACmd(PEDACmd):
                     text.append(red(CPSR_TEXT[i].upper(), "bold"))
                 else:
                     text.append(green(CPSR_TEXT[i].lower()))
-            text.append(blue("[%s-MODE] " % self._get_mode()))
+            text.append(blue("[%s-MODE]" % self._get_mode()))
             text = ' '.join(text)
 
             cpsr = peda.getreg("cpsr")
