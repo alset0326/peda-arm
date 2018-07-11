@@ -207,20 +207,51 @@ REGISTERS = {
     64: ['x' + str(i) for i in range(31)] + 'sp pc'.split()
 }
 
-CPSR = ["T", "F", "I", "V", "C", "Z", "N"]
-CPSR_TEXT = ["thumb", "no-fiq", "no-irq", "overflow", "carry", "zero", "negative"]
-CPSR_T = 1 << 5
-CPSR_F = 1 << 6
-CPSR_I = 1 << 7
-CPSR_V = 1 << 28
-CPSR_C = 1 << 29
-CPSR_Z = 1 << 30
+CPSRS = {
+    32: 'N Z C V I F T'.split(),
+    64: 'N Z C V SS IL D A I F'
+}
+
+CPSR_TEXTS = {
+    32: 'negative zero carry overflow no-irq no-fiq thumb'.split(),
+    64: 'negative zero carry overflow software-step illegal-execution debug asynchronous-abort no-irq no-fiq'.split()
+}
+
 CPSR_N = 1 << 31
-CPSR_INDEX = [CPSR_T, CPSR_F, CPSR_I, CPSR_V, CPSR_C, CPSR_Z, CPSR_N]
-CPSR_M = 0b11111
-CPSR_M_TEXT = ['user', 'fiq', 'irq', 'supervisor', 'abort', 'undefined', 'system']
-CPSR_M_INDEX = [0b10000, 0b10001, 0b10010, 0b10011, 0b10111, 0b11011, 0b11111]
-CPSR_MODES = dict(zip(CPSR_M_INDEX, CPSR_M_TEXT))
+CPSR_Z = 1 << 30
+CPSR_C = 1 << 29
+CPSR_V = 1 << 28
+CPSR_SS = 1 << 21
+CPSR_IL = 1 << 20
+CPSR_D = 1 << 9
+CPSR_A = 1 << 8
+CPSR_I = 1 << 7
+CPSR_F = 1 << 6
+CPSR_T = 1 << 5
+CPSR_MASKS = {
+    32: [CPSR_N, CPSR_Z, CPSR_C, CPSR_V, CPSR_I, CPSR_F, CPSR_T],
+    64: [CPSR_N, CPSR_Z, CPSR_C, CPSR_V, CPSR_SS, CPSR_IL, CPSR_D, CPSR_A, CPSR_I, CPSR_F]
+}
+
+CPSR_M_MASKS = {
+    32: 0b11111,
+    64: 0b1111
+}
+CPSR_M_MODES = {
+    32: {0b10000: 'user', 0b10001: 'fiq', 0b10010: 'irq', 0b10011: 'supervisor', 0b10111: 'abort', 0b11011: 'undefined',
+         0b11111: 'system'},
+    64: {0b0000: 'EL0t', 0b0100: 'El1t', 0b0101: 'EL1h', 0b1000: 'EL2t', 0b1001: 'EL2h', 0b1100: 'EL3t', 0b1101: 'EL3h'}
+}
+
+
+# CPSR = ["T", "F", "I", "V", "C", "Z", "N"]
+# CPSR_TEXT = ["thumb", "no-fiq", "no-irq", "overflow", "carry", "zero", "negative"]
+#
+# CPSR_INDEX = [CPSR_T, CPSR_F, CPSR_I, CPSR_V, CPSR_C, CPSR_Z, CPSR_N]
+# CPSR_M = 0b11111
+# CPSR_M_TEXT = ['user', 'fiq', 'irq', 'supervisor', 'abort', 'undefined', 'system']
+# CPSR_M_INDEX = [0b10000, 0b10001, 0b10010, 0b10011, 0b10111, 0b11011, 0b11111]
+# CPSR_MODES = dict(zip(CPSR_M_INDEX, CPSR_M_TEXT))
 
 
 class ArmPEDACmd(PEDACmd):
@@ -322,7 +353,7 @@ class ArmPEDACmd(PEDACmd):
         if regs is None:
             return []
 
-        (arch, bits) = self.peda.getarch()
+        bits = self.peda.getbits()
 
         code = ""
         if argc is None:
@@ -335,9 +366,9 @@ class ArmPEDACmd(PEDACmd):
                     break
                 code = "0x%x:%s\n" % (addr, inst) + code
 
-        if "32" in arch:
+        if bits == 32:
             args = self._get_function_args_32(code, argc)
-        elif "64" in arch:
+        elif bits == 64:
             args = self._get_function_args_64(code, argc)
 
         return args
@@ -689,16 +720,22 @@ class ArmPEDACmd(PEDACmd):
         cpsr = self.peda.getreg("cpsr")
         if not cpsr:
             return None
+
+        bits = self.peda.getbits()
+        CPSR = CPSRS[bits]
+        CPSR_MASK = CPSR_MASKS[bits]
         flags = {}
         for i in range(len(CPSR)):
-            flags[CPSR[i]] = bool(cpsr & CPSR_INDEX[i])
+            flags[CPSR[i]] = bool(cpsr & CPSR_MASK[i])
         return flags
 
     def _get_mode(self):
         cpsr = self.peda.getreg("cpsr")
         if not cpsr:
             return None
-        mode = cpsr & CPSR_M
+        bits = self.peda.getbits()
+        mode = cpsr & CPSR_M_MASKS[bits]
+        CPSR_MODES = CPSR_M_MODES[bits]
         if mode in CPSR_MODES:
             return CPSR_MODES[mode].upper()
         else:
@@ -717,6 +754,11 @@ class ArmPEDACmd(PEDACmd):
         if not cpsr:
             return False
 
+        bits = self.peda.getbits()
+        CPSR = CPSRS[bits]
+        CPSR_TEXT = CPSR_TEXTS[bits]
+        CPSR_MASK = CPSR_MASKS[bits]
+
         if flagname.upper() in CPSR:
             index = CPSR.index(flagname.upper())
         elif flagname.lower() in CPSR_TEXT:
@@ -726,7 +768,7 @@ class ArmPEDACmd(PEDACmd):
 
         if value is None or cpsr[CPSR[index]] != value:  # switch value
             reg_cpsr = self.peda.getreg("cpsr")
-            reg_cpsr ^= CPSR_INDEX[index]
+            reg_cpsr ^= CPSR_MASK[index]
             result = self.peda.execute("set $cpsr = 0x%x" % reg_cpsr)
             return result
 
@@ -750,18 +792,22 @@ class ArmPEDACmd(PEDACmd):
             self._missing_argument()
 
         if option is None:  # display cpsr
-            mode = self._get_mode()
-            text = blue("[%s-MODE] " % mode)
+            bits = self.peda.getbits()
+            CPSR = CPSRS[bits]
+            CPSR_TEXT = CPSR_TEXTS[bits]
 
+            text = []
             flags = self._get_cpsr()
             for (i, f) in enumerate(CPSR):
                 if flags[f]:
-                    text += "%s " % red(CPSR_TEXT[i].upper(), "bold")
+                    text.append(red(CPSR_TEXT[i].upper(), "bold"))
                 else:
-                    text += "%s " % green(CPSR_TEXT[i].lower())
+                    text.append(green(CPSR_TEXT[i].lower()))
+            text.append(blue("[%s-MODE] " % self._get_mode()))
+            text = ' '.join(text)
 
             cpsr = peda.getreg("cpsr")
-            msg("%s: 0x%x (%s)" % (green("CPSR"), cpsr, text.strip()))
+            msg("%s: 0x%x (%s)" % (green("CPSR"), cpsr, text))
 
         elif option == "set":
             self._set_cpsr(flagname.lower(), True)
@@ -771,8 +817,6 @@ class ArmPEDACmd(PEDACmd):
 
         elif option == 'toggle':
             self._set_cpsr(flagname, None)
-
-        return
 
     cpsr.options = ["set", "clear"]
 
@@ -808,7 +852,7 @@ class ArmPEDACmd(PEDACmd):
             - bin code (raw bytes)
         """
         if arch is None:
-            (_, bits) = self.peda.getarch()
+            bits = self.peda.getbits()
             arch = 'arm' if bits == 32 else 'aarch64'
         return self.asm.assemble(asmcode, arch)
 
@@ -825,7 +869,7 @@ class ArmPEDACmd(PEDACmd):
         if to_int(mode) is not None:
             address, mode = mode, None
 
-        (arch, bits) = peda.getarch()
+        bits = self.peda.getbits()
         if mode is None:
             cpsr = self._get_cpsr()
             if not cpsr:

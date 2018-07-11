@@ -415,6 +415,10 @@ class PEDA(object):
             bits = 64
         return arch, bits
 
+    @memoized
+    def getbits(self):
+        return self.getarch()[1]
+
     def intsize(self):
         """
         Get dword size of debugged program
