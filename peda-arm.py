@@ -209,7 +209,7 @@ REGISTERS = {
 
 CPSRS = {
     32: 'N Z C V I F T'.split(),
-    64: 'N Z C V SS IL D A I F'
+    64: 'N Z C V SS IL D A I F'.split()
 }
 
 CPSR_TEXTS = {
