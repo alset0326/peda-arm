@@ -38,7 +38,7 @@ class Asm(AsmBase):
     def __init__(self):
         # Check cross compile toolchains
         PREFIXES = "arm-none-eabi- arm-eabi- arm-androideabi- arm-none-linux-gnueabi- arm-linux-androideabi- " \
-                   "arm-linux-android- arm-linux-eabi- arm-linux-gnueabi-"
+                   "arm-linux-android- arm-linux-eabi- arm-linux-gnueabi- arm-linux-gnueabihf-"
         prefix = ''
         for i in PREFIXES.split():
             command = "%sobjdump" % i
