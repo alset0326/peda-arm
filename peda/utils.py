@@ -17,19 +17,20 @@ import sys
 import struct
 import string
 import re
-import itertools
 import functools
 from subprocess import *
 import codecs
+import stat
+import os
 
-from lib import six
-from lib.six import StringIO
-from lib.six.moves import range
-from lib.six.moves import input
-from lib.six.moves import reload_module as reload
-from lib.six.moves import cPickle as pickle
+from peda import six
+from peda.six import StringIO
+from peda.six.moves import range
+from peda.six.moves import input
+from peda.six.moves import reload_module as reload
+from peda.six.moves import cPickle as pickle
 
-from lib import config
+from peda import config
 
 
 # http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
@@ -625,7 +626,7 @@ def cyclic_pattern_charset(charset_type=None):
 
     Args:
         - charset_type: charset type
-            0: basic (0-9A-za-z)
+            0: basic (0-9A-Za-z)
             1: extended (default)
             2: maximum (almost printable chars)
 
@@ -700,7 +701,7 @@ def cyclic_pattern(size=None, start=None, charset_type=None):
         - size: size of generated pattern (Int)
         - start: the start offset of the generated pattern (Int)
         - charset_type: charset type
-            0: basic (0-9A-za-z)
+            0: basic (0-9A-Za-z)
             1: extended (default)
             2: maximum (almost printable chars)
 
@@ -798,7 +799,7 @@ def _decode_string_escape_py3(str_):
 
 def decode_string_escape(str_):
     """Generic Python string escape"""
-    raise Exception('Should be overriden')
+    raise NotImplementedError('Should be overriden')
 
 
 def bytes_iterator(bytes_):
@@ -963,3 +964,49 @@ def import_plugin(name):
 
 def reload_plugin(name):
     reload_module('plugins.' + name)
+
+def is_executable_file(path):
+    """Checks that path is an executable regular file, or a symlink towards one.
+    This is roughly ``os.path isfile(path) and os.access(path, os.X_OK)``.
+    """
+    # follow symlinks,
+    fpath = os.path.realpath(path)
+
+    if not os.path.isfile(fpath):
+        # non-files (directories, fifo, etc.)
+        return False
+
+    mode = os.stat(fpath).st_mode
+
+    if (sys.platform.startswith('sunos')
+            and os.getuid() == 0):
+        # When root on Solaris, os.X_OK is True for *all* files, irregardless
+        # of their executability -- instead, any permission bit of any user,
+        # group, or other is fine enough.
+        #
+        # (This may be true for other "Unix98" OS's such as HP-UX and AIX)
+        return bool(mode & (stat.S_IXUSR |
+                            stat.S_IXGRP |
+                            stat.S_IXOTH))
+
+    return os.access(fpath, os.X_OK)
+
+def which(filename, env=None):
+    """This takes a given filename; tries to find it in the environment path;
+    then checks if it is executable. This returns the full path to the filename
+    if found and executable. Otherwise this returns None."""
+
+    # Special case where filename contains an explicit path.
+    if os.path.dirname(filename) != '' and is_executable_file(filename):
+        return filename
+    if env is None:
+        env = os.environ
+    p = env.get('PATH')
+    if not p:
+        p = os.defpath
+    pathlist = p.split(os.pathsep)
+    for path in pathlist:
+        ff = os.path.join(path, filename)
+        if is_executable_file(ff):
+            return ff
+    return None

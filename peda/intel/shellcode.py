@@ -16,14 +16,14 @@ import struct
 import traceback
 import sys
 
-from lib import six
-from lib.six.moves import http_client
-from lib.six.moves import range
-from lib.six.moves.urllib.request import urlopen
-from lib.six.moves.urllib.parse import urlencode
+from peda import six
+from peda.six.moves import http_client
+from peda.six.moves import range
+from peda.six.moves.urllib.request import urlopen
+from peda.six.moves.urllib.parse import urlencode
 
-from lib import config
-from lib.utils import msg, error_msg
+from peda import config
+from peda.utils import msg, error_msg
 
 
 def _make_values_bytes(dict_):

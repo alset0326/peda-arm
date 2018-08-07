@@ -120,8 +120,8 @@
 import struct
 import traceback
 from v8_globals_48_0_2564_8 import *
-from lib import config
-from lib.utils import *
+from peda import config
+from peda.utils import *
 
 
 def has_smi_tag(v):

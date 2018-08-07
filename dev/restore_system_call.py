@@ -35,7 +35,7 @@ def get_system_call(function_name='fork'):
         # print params_num
         # print params
         return name, params_num, params
-    print function_name, 'not found'
+    print (function_name, 'not found')
     return 'description unknown', 0, []
 
 
@@ -58,7 +58,7 @@ def do():
                 system_calls[num].extend(get_system_call(func_name))
                 # print system_calls[num][1]
         except Exception as e:
-            print index, line, e.message
+            print (index, line, e.message)
 
     p.finish()
     open('system_calls', 'w').write(zlib.compress(pickle.dumps(system_calls)))
