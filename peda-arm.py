@@ -869,8 +869,8 @@ class ArmPEDACmd(PEDACmd):
         if to_int(mode) is not None:
             address, mode = mode, None
 
-        bits = self.peda.getbits()
         if mode is None:
+            bits = self.peda.getbits()
             cpsr = self._get_cpsr()
             if not cpsr:
                 error('Not attached. Need to specify a MODE!')
