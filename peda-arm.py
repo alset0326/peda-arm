@@ -17,7 +17,7 @@ import sys
 # point to absolute path of peda.py
 PEDAFILE = os.path.abspath(os.path.expanduser(__file__))
 while os.path.islink(PEDAFILE):
-    PEDAFILE = os.readlink(PEDAFILE)
+    PEDAFILE = os.path.abspath(os.path.join(os.path.dirname(PEDAFILE), os.path.expanduser(os.readlink(PEDAFILE))))
 sys.path.insert(0, os.path.dirname(PEDAFILE))
 
 from peda import *
