@@ -3169,7 +3169,11 @@ class PEDACmd(object):
             return
         (count,) = normalize_argv(arg, 1)
         sal = gdb.selected_frame().find_sal()
+
         if sal.line == 0:
+            return
+
+        if not os.path.exists(sal.symtab.filename):
             return
 
         line_num = sal.line
