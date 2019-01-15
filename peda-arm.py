@@ -718,8 +718,8 @@ class ArmPEDACmd(PEDACmd):
 
         # tode need indeed
         cpsr = self.peda.getreg("cpsr")
-        if not cpsr:
-            return None
+        # if not cpsr:
+        #    return None
 
         bits = self.peda.getbits()
         CPSR = CPSRS[bits]
