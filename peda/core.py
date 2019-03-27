@@ -3173,7 +3173,7 @@ class PEDACmd(object):
         if sal.line == 0:
             return
 
-        if not os.path.exists(sal.symtab.filename):
+        if not os.path.exists(sal.symtab.filename) and not os.path.exists(sal.symtab.fullname()):
             return
 
         line_num = sal.line
