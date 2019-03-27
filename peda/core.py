@@ -2837,6 +2837,7 @@ class PEDACmd(object):
             MYNAME address /NN: equivalent to "x/NNi address"
         """
         (address, fmt_count) = normalize_argv(arg, 2)
+        code = None
         if isinstance(fmt_count, str) and fmt_count.startswith("/"):
             count = to_int(fmt_count[1:])
             if not count or to_int(address) is None:

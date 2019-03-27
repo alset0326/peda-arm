@@ -544,6 +544,57 @@ VULN_FUNCTIONS = [
 @memoized
 def format_disasm_code(code, nearby=None):
     """
+       Format output of disassemble command with colors to highlight:
+
+       Args:
+           - code: input asm code (String)
+           - nearby: address for nearby style format (Int)
+
+       Returns:
+           - colorized text code (String)
+       """
+
+    if not code:
+        return ''
+
+    if to_int(nearby) is not None:
+        target = to_int(nearby)
+    else:
+        target = 0
+
+    results = []
+    for line in code.splitlines():
+        if ":" not in line:  # not an assembly line
+            results.append(line)
+        else:
+            color = style = None
+            prefix = line.split(":\t")[0]
+            addr = re.search("(0x\S*)", prefix)
+            if addr:
+                addr = to_int(addr.group(1))
+            else:
+                addr = -1
+            line = "\t" + line.split(":\t", 1)[-1]
+            if addr < target:
+                style = "dark"
+            elif addr == target:
+                style = "bold"
+                color = "green"
+
+            code = colorize(line.split(";")[0], color, style)
+            if ";" in line:
+                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
+            else:
+                comment = ""
+            line = "%s:%s%s" % (prefix, code, comment)
+            results.append(line)
+
+    return '\n'.join(results)
+
+
+@memoized
+def format_disasm_code_arm(code, nearby=None):
+    """
     Format output of disassemble command with colors to highlight:
         - dangerous functions (rats/flawfinder)
         - branching: jmp, call, ret
@@ -556,33 +607,28 @@ def format_disasm_code(code, nearby=None):
     Returns:
         - colorized text code (String)
     """
-    # tode
     colorcodes = {
         "cmp": "red",
-        # "test": "red",
-        # "call": "green",
         "b": "yellow",  # jump
-        # "ret": "blue",
     }
-    result = ""
 
     if not code:
-        return result
+        return ''
 
     if to_int(nearby) is not None:
         target = to_int(nearby)
     else:
         target = 0
 
+    results = []
     for line in code.splitlines():
         if ":" not in line:  # not an assembly line
-            result += line + "\n"
+            results.append(line)
         else:
             color = style = None
-            # tode
             m = re.search(".*(0x\S*).*:\s*(\S*)", line)
             if not m:  # failed to parse
-                result += line + "\n"
+                results.append(line)
                 continue
             addr, opcode = to_int(m.group(1)), m.group(2)
             for c in colorcodes:
@@ -615,9 +661,84 @@ def format_disasm_code(code, nearby=None):
             else:
                 comment = ""
             line = "%s:%s%s" % (prefix, code, comment)
-            result += line + "\n"
+            results.append(line)
 
-    return result.rstrip()
+    return '\n'.join(results)
+
+
+@memoized
+def format_disasm_code_intel(code, nearby=None):
+    """
+    Format output of disassemble command with colors to highlight:
+        - dangerous functions (rats/flawfinder)
+        - branching: jmp, call, ret
+        - testing: cmp, test
+    Args:
+        - code: input asm code (String)
+        - nearby: address for nearby style format (Int)
+    Returns:
+        - colorized text code (String)
+    """
+    colorcodes = {
+        "cmp": "red",
+        "test": "red",
+        "call": "green",
+        "j": "yellow",  # jump
+        "ret": "blue",
+    }
+
+    if not code:
+        return ''
+
+    if to_int(nearby) is not None:
+        target = to_int(nearby)
+    else:
+        target = 0
+
+    results = []
+    for line in code.splitlines():
+        if ":" not in line:  # not an assembly line
+            results.append(line)
+        else:
+            color = style = None
+            m = re.search(".*(0x\S*).*:\s*(\S*)", line)
+            if not m:  # failed to parse
+                results.append(line)
+                continue
+            addr, opcode = to_int(m.group(1)), m.group(2)
+            for c in colorcodes:
+                if c in opcode:
+                    color = colorcodes[c]
+                    if c == "call":
+                        for f in VULN_FUNCTIONS:
+                            if f in line.split(":\t", 1)[-1]:
+                                style = "bold, underline"
+                                color = "red"
+                                break
+                    break
+
+            prefix = line.split(":\t")[0]
+            addr = re.search("(0x\S*)", prefix)
+            if addr:
+                addr = to_int(addr.group(1))
+            else:
+                addr = -1
+            line = "\t" + line.split(":\t", 1)[-1]
+            if addr < target:
+                style = "dark"
+            elif addr == target:
+                style = "bold"
+                color = "green"
+
+            code = colorize(line.split(";")[0], color, style)
+            if ";" in line:
+                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
+            else:
+                comment = ""
+            line = "%s:%s%s" % (prefix, code, comment)
+            results.append(line)
+
+    return '\n'.join(results)
 
 
 def cyclic_pattern_charset(charset_type=None):
@@ -965,6 +1086,7 @@ def import_plugin(name):
 def reload_plugin(name):
     reload_module('plugins.' + name)
 
+
 def is_executable_file(path):
     """Checks that path is an executable regular file, or a symlink towards one.
     This is roughly ``os.path isfile(path) and os.access(path, os.X_OK)``.
@@ -990,6 +1112,7 @@ def is_executable_file(path):
                             stat.S_IXOTH))
 
     return os.access(fpath, os.X_OK)
+
 
 def which(filename, env=None):
     """This takes a given filename; tries to find it in the environment path;

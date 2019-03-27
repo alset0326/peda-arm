@@ -541,7 +541,7 @@ class IntelPEDACmd(PEDACmd):
                         break
 
             if matched:
-                code = format_disasm_code(code)
+                code = format_disasm_code_intel(code)
                 msg("%s%s%s" % (" " * (prev_depth - 1), " dep:%02d " % (prev_depth - 1), colorize(code.strip())),
                     teefd=logfd)
                 args = self.peda.get_function_args()
@@ -731,7 +731,7 @@ class IntelPEDACmd(PEDACmd):
             # stopped at function call
             if "call" in opcode:
                 text += self.peda.disassemble_around(pc, count)
-                msg(format_disasm_code(text, pc))
+                msg(format_disasm_code_intel(text, pc))
                 self.dumpargs()
             # stopped at jump
             elif "j" in opcode:
@@ -747,7 +747,7 @@ class IntelPEDACmd(PEDACmd):
                             text += line + "\n"
                         else:
                             text += " | %s\n" % line.strip()
-                    text = format_disasm_code(text, pc) + "\n"
+                    text = format_disasm_code_intel(text, pc) + "\n"
                     text += " |->"
                     code = self.peda.get_disasm(jumpto, count // 2)
                     if not code:
@@ -759,14 +759,14 @@ class IntelPEDACmd(PEDACmd):
                         text += "       %s\n" % line.strip()
                     text += red("JUMP is taken".rjust(79))
                 else:  # JUMP is NOT taken
-                    text += format_disasm_code(peda.disassemble_around(pc, count), pc)
+                    text += format_disasm_code_intel(peda.disassemble_around(pc, count), pc)
                     text += "\n" + green("JUMP is NOT taken".rjust(79))
 
                 msg(text.rstrip())
             # stopped at other instructions
             else:
                 text += self.peda.disassemble_around(pc, count)
-                msg(format_disasm_code(text, pc))
+                msg(format_disasm_code_intel(text, pc))
         else:  # invalid $PC
             msg("Invalid $PC address: 0x%x" % pc, "red")
 

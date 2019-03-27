@@ -641,7 +641,7 @@ class ArmPEDACmd(PEDACmd):
                             text += line + "\n"
                         else:
                             text += " | %s\n" % line.strip()
-                    text = format_disasm_code(text, pc) + "\n"
+                    text = format_disasm_code_arm(text, pc) + "\n"
                     text += " |->"
                     if 'x' in opcode:
                         current_mode = peda.execute_redirect('show arm force-mode')
@@ -665,7 +665,7 @@ class ArmPEDACmd(PEDACmd):
                     msg(text.rstrip())
                     self.dumpargs()
                 else:  # JUMP is NOT taken
-                    text += format_disasm_code(peda.disassemble_around(pc, count), pc)
+                    text += format_disasm_code_arm(peda.disassemble_around(pc, count), pc)
                     text += "\n" + green("JUMP is NOT taken".rjust(self.width))
                     msg(text.rstrip())
             elif opcode.startswith('cb'):
@@ -681,7 +681,7 @@ class ArmPEDACmd(PEDACmd):
                             text += line + "\n"
                         else:
                             text += " | %s\n" % line.strip()
-                    text = format_disasm_code(text, pc) + "\n"
+                    text = format_disasm_code_arm(text, pc) + "\n"
                     text += " |->"
                     code = peda.get_disasm(jumpto, count // 2)
                     if not code:
@@ -693,13 +693,13 @@ class ArmPEDACmd(PEDACmd):
                     text += red("JUMP is taken".rjust(self.width))
                     msg(text.rstrip())
                 else:  # JUMP is NOT taken
-                    text += format_disasm_code(peda.disassemble_around(pc, count), pc)
+                    text += format_disasm_code_arm(peda.disassemble_around(pc, count), pc)
                     text += "\n" + green("JUMP is NOT taken".rjust(self.width))
                     msg(text.rstrip())
             # stopped at other instructions
             else:
                 text += peda.disassemble_around(pc, count)
-                msg(format_disasm_code(text, pc))
+                msg(format_disasm_code_arm(text, pc))
                 if 'svc' in opcode:
                     msg('')
                     self.syscall()
