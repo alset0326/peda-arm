@@ -2333,7 +2333,7 @@ class PEDACmd(object):
         (modname,) = normalize_argv(arg, 1)
         # save current PEDA options
         saved_opt = config.Option
-        peda_path = os.path.dirname(self.pedafile) + "/pdea/"
+        peda_path = os.path.dirname(self.pedafile) + "/peda/"
         if not modname:
             modname = "PEDA"  # just for notification
             ret = self.peda.execute("source %s" % self.pedafile)
