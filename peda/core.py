@@ -1246,13 +1246,13 @@ class PEDA(object):
             return _get_offline_maps()
 
         # retrieve all maps
-        os = self.getos()
+        target_os = self.getos()
         rmt = self.is_target_remote()
         maps = []
         try:
-            if os == "FreeBSD":
+            if target_os == "FreeBSD":
                 maps = _get_allmaps_freebsd(pid, rmt)
-            elif os == "Linux":
+            elif target_os == "Linux":
                 maps = _get_allmaps_linux(pid, rmt)
         except Exception as e:
             if config.Option.get("debug") == "on":
@@ -1262,6 +1262,9 @@ class PEDA(object):
         # select maps matched specific name
         if name == "binary":
             name = self.getfile()
+            # if remote then maybe gdb use local path
+            if self.is_target_remote():
+                name = os.path.basename(name)
         if name is None or name == "all":
             name = ""
 
@@ -1272,7 +1275,7 @@ class PEDA(object):
         else:
             addr = to_int(name)
             for (start, end, perm, mapname) in maps:
-                if start <= addr and addr < end:
+                if start <= addr < end:
                     result.append((start, end, perm, mapname))
 
         return result
@@ -1860,7 +1863,7 @@ class PEDA(object):
         if value is None:
             return result
 
-        maps = self.get_vmmap()
+        # maps = self.get_vmmap()
         binmap = self.get_vmmap("binary")
 
         (arch, bits) = self.getarch()
@@ -1885,7 +1888,7 @@ class PEDA(object):
             if headers:
                 headers = sorted(headers.items(), key=lambda x: x[1][1])
                 for (k, (start, end, type)) in headers:
-                    if value >= start and value < end:
+                    if start <= value < end:
                         if type == "code":
                             out = self.get_disasm(value)
                             p = re.compile(".*?0x[^ ]*?\s(.*)")
