@@ -1263,7 +1263,7 @@ class PEDA(object):
         if name == "binary":
             name = self.getfile()
             # if remote then maybe gdb use local path
-            if self.is_target_remote():
+            if name is not None and self.is_target_remote():
                 name = os.path.basename(name)
         if name is None or name == "all":
             name = ""
