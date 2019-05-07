@@ -1441,7 +1441,7 @@ class PEDA(object):
             intsize = self.intsize()
         value = self.readmem(address, intsize)
         if value:
-            value = to_int("0x" + codecs.encode(value[::-1], 'hex'))
+            value = str2int(value, intsize)
             return value
         else:
             return None
@@ -1507,7 +1507,7 @@ class PEDA(object):
         """
         if not intsize:
             intsize = self.intsize()
-        buf = hex2str(value, intsize).ljust(intsize, "\x00")[:intsize]
+        buf = hex2str(value, intsize).ljust(intsize, six.ensure_binary("\x00"))[:intsize]
         saved = self.readmem(address, intsize)
         if not saved:
             return False
@@ -1855,7 +1855,7 @@ class PEDA(object):
             out = PEDA.execute_redirect("x/%sx 0x%x" % ("g" if bits == 64 else "w", value))
             if out:
                 v = out.split(":\t")[-1].strip()
-                if is_printable(int2hexstr(to_int(v), bits // 8)):
+                if is_printable(int2str(to_int(v), bits // 8)):
                     out = PEDA.execute_redirect("x/s 0x%x" % value)
             return out
 
@@ -3186,7 +3186,7 @@ class PEDACmd(object):
             out = self.peda.execute_redirect('list "%s":%s' % (sal.symtab.fullname(), line_str))
         else:
             out = self.peda.execute_redirect(
-                'list "%s":%d,%d' % (sal.symtab.fullname(), line_num - count / 2, line_num + count / 2))
+                'list "%s":%d,%d' % (sal.symtab.fullname(), line_num - count // 2, line_num + count // 2))
         if not out:
             return
 
@@ -4135,20 +4135,21 @@ class PEDACmd(object):
         """
         (command, carg) = normalize_argv(arg, 2)
         # todo maybe add? mention below
-        cmds = ["int2hexstr", "list2hexstr", "str2intlist"]
+        cmds = ["int2str", "intlist2str", "str2intlist"]
         if not command or command not in cmds or not carg:
             self._missing_argument()
 
         func = globals()[command]
+        carg = decode_string_escape(carg)
         result = ''
-        if command == "int2hexstr":
+        if command == "int2str":
             if to_int(carg) is None:
                 msg("Not a number")
                 return
             result = func(to_int(carg))
             result = to_hexstr(result)
 
-        elif command == "list2hexstr":
+        elif command == "intlist2str":
             if to_int(carg) is not None:
                 msg("Not a list")
                 return
@@ -4164,7 +4165,7 @@ class PEDACmd(object):
 
         msg(result)
 
-    utils.options = ["int2hexstr", "list2hexstr", "str2intlist"]
+    utils.options = ["int2str", "intlist2str", "str2intlist"]
 
     ####################################
     #           Plugins support        #

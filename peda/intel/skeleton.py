@@ -42,7 +42,7 @@ def pattern(size=1024, start=0):
 def nops(size=1024):
     return "\\x90"*size
 
-def int2hexstr(num, intsize=4):
+def int2str(num, intsize=4):
     if intsize == 8:
         if num < 0:
             result = struct.pack("<q", num)
@@ -55,18 +55,18 @@ def int2hexstr(num, intsize=4):
             result = struct.pack("<L", num)
     return result
 
-i2hs = int2hexstr
+i2hs = int2str
 
-def list2hexstr(intlist, intsize=4):
+def intlist2str(intlist, intsize=4):
     result = ""
     for value in intlist:
         if isinstance(value, str):
             result += value
         else:
-            result += int2hexstr(value, intsize)
+            result += int2str(value, intsize)
     return result
 
-l2hs = list2hexstr
+l2hs = intlist2str
 """
 
         self.skeleton_local_argv = self.skeleton_basic
@@ -77,7 +77,7 @@ def exploit(vuln):
     padding = pattern(0)
     payload = [padding]
     payload += ["PAYLOAD"] # put your payload here
-    payload = list2hexstr(payload)
+    payload = intlist2str(payload)
     args = [vuln, payload]
     env = {"PEDA":nops()}
     resource.setrlimit(resource.RLIMIT_STACK, (-1, -1))
@@ -104,7 +104,7 @@ def exploit(vuln):
     padding = pattern(0)
     payload = [padding]
     payload += ["PAYLOAD"] # put your payload here
-    payload = list2hexstr(payload)
+    payload = intlist2str(payload)
     args = sys.argv[1:] + [None]
     # create custom env with NULL value
     env = [
@@ -147,7 +147,7 @@ def exploit(vuln):
     padding = pattern(0)
     payload = [padding]
     payload += ["PAYLOAD"] # put your payload here
-    payload = list2hexstr(payload)
+    payload = intlist2str(payload)
     env = {"PEDA":nops()}
     args = sys.argv[1:]
     resource.setrlimit(resource.RLIMIT_STACK, (-1, -1))
@@ -233,7 +233,7 @@ def exploit(host, port):
     padding = pattern(0)
     payload = [padding]
     payload += ["PAYLOAD"] # put your payload here
-    payload = list2hexstr(payload)
+    payload = intlist2str(payload)
     raw_input("Enter to continue")
     client.send(payload)
     try:

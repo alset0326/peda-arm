@@ -1978,7 +1978,7 @@ class IntelPEDACmd(PEDACmd):
                 if to_int(data) is None:
                     if data[0] == "[" and data[-1] == "]":
                         data = eval(data)
-                        data = list2hexstr(data, self.peda.intsize())
+                        data = intlist2str(data, self.peda.intsize())
                 else:
                     data = "0x%x" % data
                 result += self.peda.payload_copybytes(target, data)

@@ -355,8 +355,7 @@ def normalize_argv(args, size=0):
 
     if size == 0:
         return args
-    for i in range(len(args), size):
-        args += [None]
+    args.extend([None for _ in range(len(args), size)])
     return args
 
 
@@ -423,51 +422,49 @@ def hex2str(hexnum, intsize=4):
     return result
 
 
-def int2hexstr(num, intsize=4):
+STRUCT_FORMAT_SIGNED = ('', 'b', 'h', '', 'l', '', '', '', '', 'q')
+STRUCT_FORMAT_UNSIGNED = ('', 'B', 'H', '', 'L', '', '', '', '', 'Q')
+
+
+def int2str(num, intsize=4):
     """
-    Convert a number to hexified string
+    Convert a number to raw string
     """
-    if intsize == 8:
-        if num < 0:
-            result = struct.pack("<q", num)
-        else:
-            result = struct.pack("<Q", num)
+    if num < 0:
+        mark = STRUCT_FORMAT_SIGNED[intsize]
     else:
-        if num < 0:
-            result = struct.pack("<l", num)
-        else:
-            result = struct.pack("<L", num)
-    return result
+        mark = STRUCT_FORMAT_UNSIGNED[intsize]
+    return struct.pack("<" + mark, num)
 
 
-def list2hexstr(intlist, intsize=4):
+def intlist2str(intlist, intsize=4):
     """
     Convert a list of number/string to hexified string
     """
-    result = ""
+    result = []
     for value in intlist:
-        if isinstance(value, str):
-            result += value
+        if isinstance(value, six.binary_type):
+            result.append(value)
         else:
-            result += int2hexstr(value, intsize)
-    return result
+            result.append(int2str(value, intsize))
+    return six.binary_type().join(result)
 
 
 def str2intlist(data, intsize=4):
     """
     Convert a string to list of int
     """
-    result = []
-    data = decode_string_escape(data)[::-1]
-    l = len(data)
-    data = ("\x00" * (intsize - l % intsize) + data) if l % intsize != 0 else data
-    for i in range(0, l, intsize):
-        if intsize == 8:
-            val = struct.unpack(">Q", data[i:i + intsize])[0]
-        else:
-            val = struct.unpack(">L", data[i:i + intsize])[0]
-        result = [val] + result
-    return result
+    data = six.ensure_binary(data, 'ISO-8859-1')
+    adjust_mask = intsize - 1
+    data = data.ljust((len(data) + adjust_mask) & (~adjust_mask), six.ensure_binary('\x00', 'ISO-8859-1'))
+    return struct.unpack('<' + STRUCT_FORMAT_UNSIGNED[intsize] * (len(data) // intsize), data)
+
+
+def str2int(data, intsize=4):
+    """
+    Convert a string to a int
+    """
+    return str2intlist(data, intsize)[0]
 
 
 @memoized
