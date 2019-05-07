@@ -422,8 +422,8 @@ def hex2str(hexnum, intsize=4):
     return result
 
 
-STRUCT_FORMAT_SIGNED = ('', 'b', 'h', '', 'l', '', '', '', '', 'q')
-STRUCT_FORMAT_UNSIGNED = ('', 'B', 'H', '', 'L', '', '', '', '', 'Q')
+STRUCT_FORMAT_SIGNED = ('', 'b', 'h', '', 'l', '', '', '', 'q')
+STRUCT_FORMAT_UNSIGNED = ('', 'B', 'H', '', 'L', '', '', '', 'Q')
 
 
 def int2str(num, intsize=4):
