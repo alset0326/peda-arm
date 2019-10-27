@@ -548,13 +548,13 @@ class ArmPEDACmd(PEDACmd):
         ) or (
                 cond == 'ls' and (not flags['C'] or flags['Z'])
         ) or (
-                cond == 'ge' and flags['N'] == flags['V']
+                cond == 'ge' and (flags['Z'] or flags['N'] == flags['V'])
         ) or (
-                cond == 'lt' and flags['N'] != flags['V']
+                cond == 'lt' and not flags['Z'] and flags['N'] != flags['V']
         ) or (
                 cond == 'gt' and not flags['Z'] and flags['N'] == flags['V']
         ) or (
-                cond == 'le' and flags['Z'] and flags['N'] != flags['V']
+                cond == 'le' and (flags['Z'] or flags['N'] != flags['V'])
         ):
             return next_addr
         else:
