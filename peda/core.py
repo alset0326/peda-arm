@@ -10,19 +10,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import shlex
-import time
 import fcntl
+import shlex
 import termios
+import time
 import traceback
+
 import gdb  # for ide
 
-from .six.moves import range
+from . import config
 from .six.moves import cPickle as pickle
 from .six.moves import input
-
+from .six.moves import range
 from .utils import *
-from . import config
 
 __all__ = ['PEDA', 'PEDACmd', 'PEDACmdAlias', 'PluginCommand', 'Alias', 'pedaGDBCommand', 'AsmBase']
 
@@ -1878,6 +1878,8 @@ class PEDA(object):
             out = examine_data(value, bits)
             if out:
                 result = (to_hex(value), "data", out.split(":", 1)[1].strip())
+            else:
+                result = (to_hex(value), "data", None)
 
         elif self.is_executable(value):  # code/rodata address
             if self.is_address(value, binmap):
@@ -1918,7 +1920,7 @@ class PEDA(object):
             if out:
                 result = (to_hex(value), "rodata", out.split(":", 1)[1].strip())
             else:
-                result = (to_hex(value), "rodata", "MemError")
+                result = (to_hex(value), "rodata", None)
 
         return result
 
@@ -1937,7 +1939,7 @@ class PEDA(object):
         (v, t, vn) = self.examine_mem_value(value)
         count = 0
         while vn is not None and count < 8:
-            result += [(v, t, vn)]
+            result.append((v, t, vn))
             if v == vn or to_int(v) == to_int(vn):  # point to self
                 break
             if to_int(vn) is None:

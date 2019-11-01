@@ -10,27 +10,27 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tempfile
-import pprint
-import inspect
-import sys
-import struct
-import string
-import re
-import functools
-from subprocess import *
 import codecs
-import stat
+import functools
+import inspect
 import os
+import pprint
+import re
+import stat
+import string
+import struct
+import sys
+import tempfile
+from subprocess import *
 
-from peda import six
-from peda.six import StringIO
-from peda.six.moves import range
-from peda.six.moves import input
-from peda.six.moves import reload_module as reload
 from peda.six.moves import cPickle as pickle
+from peda.six.moves import input
+from peda.six.moves import range
+from peda.six.moves import reload_module as reload
 
 from peda import config
+from peda import six
+from peda.six import StringIO
 
 
 # http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
@@ -507,27 +507,27 @@ def format_reference_chain(chain):
     """
     Colorize a chain of references
     """
-    v = t = vn = None
-    text = ""
     if not chain:
-        text += "Cannot access memory address"
+        return "Cannot access memory address"
     else:
+        v = t = vn = None
+        l = []
         first = True
         for (v, t, vn) in chain:
             if t != "value":
-                text += "%s%s " % ("--> " if not first else "", format_address(v, t))
+                l.append("%s%s " % ("--> " if not first else "", format_address(v, t)))
             else:
-                text += "%s%s " % ("--> " if not first else "", v)
+                l.append("%s%s " % ("--> " if not first else "", v))
             first = False
 
         if vn:
-            text += "(%s)" % vn
+            l.append("(%s)" % vn)
         else:
             if v != "0x0":
                 s = hex2str(v)
                 if is_printable(s, "\x00"):
-                    text += "(%s)" % string_repr(s.split(b"\x00")[0])
-    return text
+                    l.append("(%s)" % string_repr(s.split(b"\x00")[0]))
+        return ''.join(l)
 
 
 # vulnerable C functions, source: rats/flawfinder
