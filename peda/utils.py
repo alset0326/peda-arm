@@ -1081,7 +1081,7 @@ def import_plugin(name):
 
 
 def reload_plugin(name):
-    reload_module('plugins.' + name)
+    return reload_module('plugins.' + name)
 
 
 def is_executable_file(path):
