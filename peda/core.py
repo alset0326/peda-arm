@@ -389,6 +389,11 @@ class PEDA(object):
             - os version (String)
         """
         vpath = "/proc/version"
+
+        # don't read /proc/version in Termux
+        if os.path.isdir('/data/data/com.termux'):
+            return 'Termux'
+
         if self.is_target_remote():  # remote target
             out = self.read_from_remote(vpath)
         else:  # local target
