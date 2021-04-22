@@ -18,7 +18,6 @@ import traceback
 
 import gdb  # for ide
 
-from . import config
 from .six.moves import cPickle as pickle
 from .six.moves import input
 from .six.moves import range
@@ -390,11 +389,9 @@ class PEDA(object):
         """
         vpath = "/proc/version"
         if self.is_target_remote():  # remote target
-            out = self.read_from_remote(vpath)
+            return self.read_from_remote(vpath).split()[0]
         else:  # local target
-            out = open(vpath).read()
-
-        return out.split(' ')[0]
+            return os.uname()[0]
 
     @memoized
     def getarch(self):
