@@ -1917,7 +1917,7 @@ class PEDA(object):
             if out:
                 result = (to_hex(value), "rodata", out.split(":", 1)[1].strip())
             else:
-                result = (to_hex(value), "rodata", None)
+                result = (to_hex(value), "rodata", "MemError")
 
         return result
 
@@ -1935,7 +1935,7 @@ class PEDA(object):
         result = []
         (v, t, vn) = self.examine_mem_value(value)
         count = 0
-        while vn is not None and count < 8:
+        while vn is not None and count < 5:
             result.append((v, t, vn))
             if v == vn or to_int(v) == to_int(vn):  # point to self
                 break
@@ -1945,6 +1945,9 @@ class PEDA(object):
                 break
             (v, t, vn) = self.examine_mem_value(to_int(vn))
             count += 1
+        else:
+            if vn is not None:
+                result.append((v, t, "--> ..."))
 
         return result
 
@@ -3633,23 +3636,36 @@ class PEDACmd(object):
         if not self.peda.is_address(address):  # cannot determine address
             for i in range(count):
                 if not self.peda.execute("x/%sx 0x%x" % ("g" if step == 8 else "w", address + i * step)):
+                    msg()
                     break
             return
 
-        result = []
-        for i in range(count):
-            value = address + i * step
-            if self.peda.is_address(value):
-                result += [self.peda.examine_mem_reference(value)]
+        # get all {value -> regs}
+        reg_value_dict = {}  # value -> [reg]
+        reg_name_dict = self.peda.getregs()  # name -> value
+        for n, a in reg_name_dict.items():
+            if a not in reg_value_dict:
+                reg_value_dict[a] = [n]
             else:
-                result += [None]
-        idx = 0
-        text = ""
-        for chain in result:
-            text += "%04d| " % (idx)
-            text += format_reference_chain(chain)
-            text += "\n"
-            idx += step
+                reg_value_dict[a].append(n)
+
+        regs = []  # reg string list
+        contents = []
+        for value in range(address, address + step * count, step):
+            if self.peda.is_address(value):
+                regs.append(' '.join(reg_value_dict[value]) if value in reg_value_dict else '')
+                contents.append(self.peda.examine_mem_reference(value))
+            else:
+                regs.append('')
+                contents.append(None)
+
+        reg_longest_len = max(map(len, regs))
+
+        text = '\n'.join(
+            # or "%04d| " ?
+            "%02x:%04x| %s %s" % (idx, idx * step, reg.center(reg_longest_len), format_reference_chain(content))
+            for (idx, (reg, content)) in enumerate(zip(regs, contents))
+        )
 
         pager(text)
 
