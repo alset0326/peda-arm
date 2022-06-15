@@ -202,10 +202,10 @@ class Asm(AsmBase):
 SYSTEM_CALLS = None
 
 # Define registers
-REGISTERS = {
-    32: ['r' + str(i) for i in range(13)] + 'sp lr pc'.split(),
-    64: ['x' + str(i) for i in range(31)] + 'sp pc'.split()
-}
+# REGISTERS = {
+#     32: ['r' + str(i) for i in range(13)] + 'sp lr pc'.split(),
+#     64: ['x' + str(i) for i in range(31)] + 'sp pc'.split()
+# }
 
 CPSRS = {
     32: 'N Z C V I F T'.split(),
@@ -259,7 +259,6 @@ class ArmPEDACmd(PEDACmd):
         """
         Guess the number of arguments passed to a function - arm
         """
-        # tode
         reg_order = ["r0", "r1", "r2", "r3"]
 
         if argc is None:
@@ -399,6 +398,9 @@ class ArmPEDACmd(PEDACmd):
 
     # return [function_name,name,params_num,[params...],[params_value...]]
     def _get_syscall_args(self, num=None):
+        if self.peda.getbits() != 32:
+            # todo
+            return None
         regs = self.peda.getregs()
         if regs is None:
             return None
@@ -508,7 +510,6 @@ class ArmPEDACmd(PEDACmd):
 
         if not inst:
             pc = self.peda.getpc()
-            # tode
             inst = self.peda.execute_redirect("x/i 0x%x" % pc)
             if not inst:
                 return None
@@ -627,7 +628,6 @@ class ArmPEDACmd(PEDACmd):
         if inst:  # valid $PC
             text = ""
             opcode = inst.split(":\t")[-1].split()[0]
-            # tode
             if opcode.startswith('b'):
                 jumpto = self._testjump(inst)
                 if jumpto:  # JUMP is taken
@@ -716,7 +716,7 @@ class ArmPEDACmd(PEDACmd):
             - dictionary of named flags
         """
 
-        # tode need indeed
+        # need indeed
         cpsr = self.peda.getreg("cpsr")
         # if not cpsr:
         #    return None
@@ -749,7 +749,7 @@ class ArmPEDACmd(PEDACmd):
             - True if success (Bool)
         """
 
-        # tode like above
+        #  like above
         cpsr = self._get_cpsr()
         if not cpsr:
             return False
@@ -782,7 +782,6 @@ class ArmPEDACmd(PEDACmd):
             MYNAME [set|clear] flagname
             MYNAME [set|clear|toggle] flagname
         """
-        # tode
 
         (option, flagname) = normalize_argv(arg, 2)
         if not self._is_running():
@@ -952,7 +951,7 @@ if __name__ == '__main__':
     info('Checking cross complie toolchains')
     asm = Asm()
     info('Init PEDA main section.')
-    peda = PEDA(REGISTERS, asm)
+    peda = PEDA(asm)
     pedacmd = ArmPEDACmd(peda, PEDAFILE, asm)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 

@@ -11,7 +11,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import random
 import sys
 
 # point to absolute path of peda.py
@@ -126,13 +125,13 @@ class Nasm(AsmBase):
 
 # Define registers
 
-REGISTERS = {
-    8: ["al", "ah", "bl", "bh", "cl", "ch", "dl", "dh"],
-    16: ["ax", "bx", "cx", "dx"],
-    32: ["eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "eip"],
-    64: ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
-         "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
-}
+# REGISTERS = {
+#     8: ["al", "ah", "bl", "bh", "cl", "ch", "dl", "dh"],
+#     16: ["ax", "bx", "cx", "dx"],
+#     32: ["eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "eip"],
+#     64: ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
+#          "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+# }
 
 EFLAGS = ["CF", "PF", "AF", "ZF", "SF", "TF", "IF", "DF", "OF"]
 EFLAGS_TEXT = ["carry", "parity", "adjust", "zero", "sign", "trap", "interrupt", "direction", "overflow"]
@@ -1173,7 +1172,7 @@ class IntelPEDACmd(PEDACmd):
                         yield code
             else:
                 save = ops[pos]
-                for regs in REGISTERS.values():
+                for regs in self.peda.register_names():
                     for reg in regs:
                         ops[pos] = save.replace("?", reg, 1)
                         for asmcode_reg in buildcode(code, pos, depth + 1):
@@ -2007,7 +2006,7 @@ if __name__ == '__main__':
     info('Checking complie toolchains')
     asm = Nasm()
     info('Init PEDA main section.')
-    peda = PEDA(REGISTERS, asm)
+    peda = PEDA(asm)
     pedacmd = IntelPEDACmd(peda, PEDAFILE, asm)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 

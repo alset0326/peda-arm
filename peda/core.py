@@ -18,6 +18,7 @@ import traceback
 
 import gdb  # for ide
 
+from .six import binary_type
 from .six.moves import cPickle as pickle
 from .six.moves import input
 from .six.moves import range
@@ -38,9 +39,8 @@ class PEDA(object):
     Class for actual functions of PEDA commands
     """
 
-    def __init__(self, registers, asm):
+    def __init__(self, asm):
         self.SAVED_COMMANDS = {}  # saved GDB user's commands
-        self.registers = registers  # for parse and eval used
         self.asm = asm  # for xref used
 
     ####################################
@@ -99,8 +99,7 @@ class PEDA(object):
             - value of expression
         """
 
-        regs = sum(self.registers.values(), [])
-        for r in regs:
+        for r in self.register_names():
             if "$" + r not in exp and "e" + r not in exp and "r" + r not in exp:
                 exp = exp.replace(r, "$%s" % r)
 
@@ -207,8 +206,7 @@ class PEDA(object):
         tmp.close()
         return result
 
-    @staticmethod
-    def define_user_command(cmd, code):
+    def define_user_command(self, cmd, code):
         """
         Define a user-defined command, overwrite the old content
 
@@ -227,8 +225,7 @@ class PEDA(object):
         tmp.close()
         return result
 
-    @staticmethod
-    def append_user_command(cmd, code):
+    def append_user_command(self, cmd, code):
         """
         Append code to a user-defined command, define new command if not exist
 
@@ -283,8 +280,7 @@ class PEDA(object):
 
         return result
 
-    @staticmethod
-    def run_gdbscript_code(code):
+    def run_gdbscript_code(self, code):
         """
         Run basic gdbscript code as it is typed in interactively
 
@@ -302,8 +298,63 @@ class PEDA(object):
         return result
 
     #########################
-    #   Debugging Helpers   #
+    #    Program Features   #
     #########################
+
+    @memoized
+    def ulong_t(self):
+        """
+        the unsigned long type in gdb
+        Returns:
+            gdb.Type
+        """
+        return gdb.lookup_type('unsigned long')
+
+    @memoized
+    def inferior(self):
+        """
+        current inferior
+        Returns:
+            gdb.Inferior
+        """
+        return gdb.selected_inferior()
+
+    @memoized
+    def architecture(self):
+        """
+        current architecture
+        Returns:
+            gdb.Architecture
+        """
+        return gdb.selected_inferior().architecture()
+
+    def registers(self):
+        """
+        general register names
+        Returns:
+            gdb.RegisterDescriptorIterator so cannot be memoized
+        """
+        # Architecture.registers([reggroup])
+        return self.architecture().registers('general')
+
+    @memoized
+    def register_names(self):
+        """
+        general register names
+        Returns:
+            [str]
+        """
+        return [i.name for i in self.registers()]
+
+    @memoized
+    def frame(self):
+        """
+        current frame in gdb
+        Returns:
+            gdb.Frame
+        """
+        return gdb.selected_frame()
+
     @memoized
     def is_target_remote(self):
         """
@@ -312,10 +363,9 @@ class PEDA(object):
         Returns:
             - True if target is remote (Bool)
         """
-        out = PEDA.execute_redirect("info program")
-        if out and "serial line" in out:  # remote target
-            return True
-        return False
+        inferior = self.inferior()
+        return hasattr(inferior, 'connection') and isinstance(getattr(inferior, 'connection'),
+                                                              gdb.RemoteTargetConnection)
 
     @memoized
     def getfile(self):
@@ -325,22 +375,9 @@ class PEDA(object):
         Returns:
             - full path to executable file (String)
         """
-        result = None
-        out = PEDA.execute_redirect('info files')
-        if out and '"' in out:
-            if self.is_target_remote():
-                p = re.compile(".*exec file:\s*`target:(.*)'")
-            else:
-                p = re.compile(".*exec file:\s*`(.*)'")
-            m = p.search(out)
-            if m:
-                result = m.group(1)
-            else:  # stripped file, get symbol file
-                p = re.compile("Symbols from \"([^\"]*)")
-                m = p.search(out)
-                if m:
-                    result = m.group(1)
-
+        result = gdb.current_progspace().filename
+        if self.is_target_remote() and result is not None and result.startswith('target:'):
+            result = result[len('target:'):]
         return result
 
     @staticmethod
@@ -378,8 +415,9 @@ class PEDA(object):
         Returns:
             - pid (Int)
         """
-        return gdb.selected_inferior().pid
+        return self.inferior().pid
 
+    @memoized
     def getos(self):
         """
         Get running OS info
@@ -401,7 +439,7 @@ class PEDA(object):
         Returns:
             - tuple of architecture info (arch (String), bits (Int))
         """
-        arch = gdb.selected_frame().architecture().name()
+        arch = self.inferior().architecture().name()
         bits = 32
         if "64" in arch:
             bits = 64
@@ -420,36 +458,33 @@ class PEDA(object):
                 + intsize = 4/8 for 32/64-bits arch
         """
 
-        (arch, bits) = self.getarch()
+        bits = self.getbits()
         return bits // 8
 
-    @staticmethod
-    def getregs(reglist=None):
+    #########################
+    #   Debugging Helpers   #
+    #########################
+
+    @memoized
+    def getregs(self, reglist=None):
         """
         Get value of some or all registers
 
         Returns:
             - dictionary of {regname(String) : value(Int)}
         """
+        ulong_t = self.ulong_t()
+        frame = self.frame()
+        architecture = self.architecture()
         if reglist:
-            reglist = reglist.replace(",", " ")
+            regs = architecture.registers()
+            reglist = [regs.find(i) for i in reglist.split(',')]
         else:
-            reglist = ""
-        regs = PEDA.execute_redirect("info registers %s" % reglist)
-        if not regs:
-            return None
+            reglist = self.registers()
 
-        result = {}
-        if regs:
-            for r in regs.splitlines():
-                r = r.split()
-                if len(r) > 1 and to_int(r[1]) is not None:
-                    result[r[0]] = to_int(r[1])
+        return dict([(i.name, int(frame.read_register(i).cast(ulong_t))) for i in reglist])
 
-        return result
-
-    @staticmethod
-    def getreg(register):
+    def getreg(self, register):
         """
         Get value of a specific register
 
@@ -459,20 +494,11 @@ class PEDA(object):
         Returns:
             - register value (Int)
         """
-        r = register.lower()
-        regs = PEDA.execute_redirect("info registers %s" % r)
-        if regs:
-            regs = regs.splitlines()
-            if len(regs) > 1:
-                return None
-            else:
-                result = to_int(regs[0].split()[1])
-                return result
+        return int(
+            self.frame().read_register(self.architecture().registers().find(register)).cast(self.ulong_t())
+        )
 
-        return None
-
-    @staticmethod
-    def getpc():
+    def getpc(self):
         """
         Get value of pc
 
@@ -480,9 +506,9 @@ class PEDA(object):
 
         """
         try:
-            return gdb.selected_frame().pc()
+            return self.frame().pc()
         except:
-            return PEDA.getreg('pc')
+            return self.getreg('pc')
 
     @staticmethod
     def set_breakpoint(location, temp=None, hard=None):
@@ -721,8 +747,7 @@ class PEDA(object):
         tmp.close()
         return result
 
-    @staticmethod
-    def disassemble(*arg):
+    def disassemble(self, *arg):
         """
         Wrapper for disassemble command
             - arg: args for disassemble command
@@ -760,7 +785,7 @@ class PEDA(object):
         Returns:
             - list of tuple (address(Int), code(String))
         """
-        disassemble = gdb.selected_frame().architecture().disassemble
+        disassemble = self.architecture().disassemble
         result = []
         backward = 4 + 4 * count
         if self.getpid() and not self.is_address(address - backward):
@@ -783,16 +808,12 @@ class PEDA(object):
         Returns:
             - tuple of (address(Int), code(String))
         """
-        out = PEDA.execute_redirect("x/i 0x%x" % address)
-        if not out:
+        dis = self.architecture().disassemble(address)
+        if not dis:
             return None
 
-        (addr, code) = out.split(":", 1)
-        addr = re.search("(0x[^ ]*)", addr).group(1)
-        addr = to_int(addr)
-        code = code.strip()
-
-        return (addr, code)
+        code = dis[0]
+        return code.get('addr'), code.get('asm')
 
     @memoized
     def next_inst(self, address, count=1):
@@ -806,17 +827,11 @@ class PEDA(object):
         Returns:
             - - list of tuple (address(Int), code(String))
         """
-        result = []
-        code = PEDA.execute_redirect("x/%di 0x%x" % (count + 1, address))
-        if not code:
+        dis = self.architecture().disassemble(address, count=count + 1)
+        if not dis:
             return None
 
-        lines = code.strip().splitlines()
-        for i in range(1, count + 1):
-            (addr, code) = lines[i].split(":", 1)
-            addr = re.search("(0x[^ ]*)", addr).group(1)
-            result += [(to_int(addr), code)]
-        return result
+        return [(code.get('addr'), code.get('asm')) for code in dis[1:]]
 
     @memoized
     def disassemble_around(self, address, count=8):
@@ -880,7 +895,7 @@ class PEDA(object):
         search_data = 1
         if search == "":
             search_data = 0
-        # tode
+
         tmpfd = None
         if self.is_target_remote():
             tmpfd = tmpfile(is_binary_file=True)
@@ -1373,8 +1388,7 @@ class PEDA(object):
         code = PEDA.execute_redirect("x/%di 0x%x" % (count, address))
         return code.rstrip()
 
-    @staticmethod
-    def dumpmem(start, end):
+    def dumpmem(self, start, end):
         """
         Dump process memory from start to end
 
@@ -1385,19 +1399,9 @@ class PEDA(object):
         Returns:
             - memory content (raw bytes)
         """
-        mem = None
-        logfd = tmpfile(is_binary_file=True)
-        logname = logfd.name
-        out = PEDA.execute_redirect("dump memory %s 0x%x 0x%x" % (logname, start, end))
-        if out is not None:
-            logfd.flush()
-            mem = logfd.read()
-            logfd.close()
+        return self.readmem(start, end - start)
 
-        return mem
-
-    @staticmethod
-    def readmem(address, size):
+    def readmem(self, address, size):
         """
         Read content of memory at an address
 
@@ -1408,20 +1412,7 @@ class PEDA(object):
         Returns:
             - memory content (raw bytes)
         """
-        # try fast dumpmem if it works
-        mem = PEDA.dumpmem(address, address + size)
-        if mem is not None:
-            return mem
-
-        # failed to dump, use slow x/gx way
-        mem = ""
-        out = PEDA.execute_redirect("x/%dbx 0x%x" % (size, address))
-        if out:
-            for line in out.splitlines():
-                bytes = line.split(":\t")[-1].split()
-                mem += "".join([chr(int(c, 0)) for c in bytes])
-
-        return mem
+        return binary_type(self.inferior().read_memory(address, size))
 
     def read_int(self, address, intsize=None):
         """
@@ -1470,25 +1461,7 @@ class PEDA(object):
         if not buf:
             return 0
 
-        if self.getpid():
-            # try fast restore mem
-            tmp = tmpfile(is_binary_file=True)
-            tmp.write(buf)
-            tmp.flush()
-            out = PEDA.execute_redirect("restore %s binary 0x%x" % (tmp.name, address))
-            tmp.close()
-        if not out:  # try the slow way
-            i = None
-            for i in range(len(buf)):
-                if not PEDA.execute("set {char}0x%x = 0x%x" % (address + i, ord(buf[i]))):
-                    return i
-            return i + 1
-        elif "error" in out:  # failed to write the whole buf, find written byte
-            for i in range(0, len(buf), 1):
-                if not self.is_address(address + i):
-                    return i
-        else:
-            return len(buf)
+        return self.inferior().write_memory(address, buf)
 
     def write_int(self, address, value, intsize=None):
         """
@@ -2684,7 +2657,7 @@ class PEDACmd(object):
         text = ""
         exp = " ".join(list(arg))
         # todo
-        m = re.search(".*\[(.*)\]|.*?s:(0x[^ ]*)", exp)
+        m = re.search(r".*\[(.*)\]|.*?s:(0x[^ ]*)", exp)
         if m:
             addr = self.peda.parse_and_eval(m.group(1))
             if to_int(addr):
@@ -2818,7 +2791,7 @@ class PEDACmd(object):
             MYNAME
         """
         filename = self.peda.getfile()
-        if filename == None:
+        if filename is None:
             msg("No file specified")
         else:
             msg(filename)
@@ -3686,19 +3659,17 @@ class PEDACmd(object):
             return
 
         def get_reg_text(r, v):
-            texts = [green("%s" % r.upper().ljust(3)), ": "]
-            chain = self.peda.examine_mem_reference(v)
-            texts.append(format_reference_chain(chain))
-            texts.append("\n")
-            return ''.join(texts)
+            return '%s: %s\n' % (
+                green("%s" % r.upper().ljust(3)),
+                format_reference_chain(self.peda.examine_mem_reference(v))
+            )
 
-        (arch, bits) = self.peda.getarch()
         if str(address).startswith("r"):
             # Register
             regs = self.peda.getregs(" ".join(arg[1:]))
             texts = []
             if regname is None:
-                for r in self.peda.registers[bits]:
+                for r in self.peda.register_names():
                     if r in regs:
                         texts.append(get_reg_text(r, regs[r]))
             else:
