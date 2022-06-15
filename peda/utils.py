@@ -49,14 +49,15 @@ class memoized(object):
         self.__doc__ = inspect.getdoc(self.func)
 
     def __call__(self, *args, **kwargs):
+        key = (self.instance, args) + tuple(kwargs.items())
         try:
-            return self.cache[(self.func, self.instance, args) + tuple(kwargs.items())]
+            return self.cache[key]
         except KeyError:
             if self.instance is None:
                 value = self.func(*args, **kwargs)
             else:
                 value = self.func(self.instance, *args, **kwargs)
-            self.cache[(self.func, self.instance, args) + tuple(kwargs.items())] = value
+            self.cache[key] = value
             return value
         except TypeError:
             # uncachable -- for instance, passing a list as an argument.
@@ -72,18 +73,13 @@ class memoized(object):
 
     def __get__(self, obj, objtype):
         """Support instance methods."""
-        if obj is None:
-            return self
-        else:
-            self.instance = obj
-            return self
+        self.instance = obj
+        return self
 
     def _reset(self):
         """Reset the cache"""
         # Make list to prevent modifying dictionary while iterating
-        for cached in list(self.cache.keys()):
-            if cached[0] == self.func and cached[1] == self.instance:
-                del self.cache[cached]
+        self.cache.clear()
 
 
 def reset_cache(module=None):
