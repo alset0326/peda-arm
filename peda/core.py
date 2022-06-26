@@ -335,7 +335,25 @@ class PEDA(object):
             gdb.RegisterDescriptorIterator so cannot be memoized
         """
         # Architecture.registers([reggroup])
-        return self.architecture().registers('general')
+        try:
+            return self.architecture().registers('general')
+        except AttributeError:
+            # AttributeError: 'gdb.Architecture' object has no attribute 'registers'
+
+            # hook gdb.Registers
+            class NameStr(str):
+                @property
+                def name(self):
+                    return self
+
+            class NameStrList(list):
+                def find(self, s):
+                    for i in self:
+                        if i.name == s:
+                            return i
+
+            regs = PEDA.execute_redirect('info registers general')
+            return NameStrList([NameStr(i.split()[0]) for i in regs.splitlines()])
 
     @memoized
     def register_names(self):
@@ -473,16 +491,22 @@ class PEDA(object):
         Returns:
             - dictionary of {regname(String) : value(Int)}
         """
-        ulong_t = self.ulong_t()
-        frame = self.frame()
-        architecture = self.architecture()
         if reglist:
-            regs = architecture.registers()
-            reglist = [regs.find(i) for i in reglist.split(',')]
+            reglist = reglist.replace(",", " ")
         else:
-            reglist = self.registers()
+            reglist = ""
+        regs = self.execute_redirect("info registers %s" % reglist)
+        if not regs:
+            return None
 
-        return dict([(i.name, int(frame.read_register(i).cast(ulong_t))) for i in reglist])
+        result = {}
+        if regs:
+            for r in regs.splitlines():
+                r = r.split()
+                if len(r) > 1 and to_int(r[1]) is not None:
+                    result[r[0]] = to_int(r[1])
+
+        return result
 
     def getreg(self, register):
         """
@@ -494,9 +518,17 @@ class PEDA(object):
         Returns:
             - register value (Int)
         """
-        return int(
-            self.frame().read_register(self.architecture().registers().find(register)).cast(self.ulong_t())
-        )
+        r = register.lower()
+        regs = PEDA.execute_redirect("info registers %s" % r)
+        if regs:
+            regs = regs.splitlines()
+            if len(regs) > 1:
+                return None
+            else:
+                result = to_int(regs[0].split()[1])
+                return result
+
+        return None
 
     def getpc(self):
         """
