@@ -320,13 +320,22 @@ class PEDA(object):
         return gdb.selected_inferior()
 
     @memoized
+    def frame(self):
+        """
+        current frame in gdb
+        Returns:
+            gdb.Frame
+        """
+        return gdb.selected_frame()
+
+    @memoized
     def architecture(self):
         """
         current architecture
         Returns:
             gdb.Architecture
         """
-        return gdb.selected_inferior().architecture()
+        return self.frame().architecture()
 
     def registers(self):
         """
@@ -365,15 +374,6 @@ class PEDA(object):
         return [i.name for i in self.registers()]
 
     @memoized
-    def frame(self):
-        """
-        current frame in gdb
-        Returns:
-            gdb.Frame
-        """
-        return gdb.selected_frame()
-
-    @memoized
     def is_target_remote(self):
         """
         Check if current target is remote
@@ -382,8 +382,13 @@ class PEDA(object):
             - True if target is remote (Bool)
         """
         inferior = self.inferior()
-        return hasattr(inferior, 'connection') and isinstance(getattr(inferior, 'connection'),
-                                                              gdb.RemoteTargetConnection)
+        if hasattr(inferior, 'connection'):
+            return isinstance(getattr(inferior, 'connection'), gdb.RemoteTargetConnection)
+        else:
+            out = PEDA.execute_redirect("info program")
+            if out and "serial line" in out:  # remote target
+                return True
+            return False
 
     @memoized
     def getfile(self):
@@ -457,7 +462,7 @@ class PEDA(object):
         Returns:
             - tuple of architecture info (arch (String), bits (Int))
         """
-        arch = self.inferior().architecture().name()
+        arch = self.architecture().name()
         bits = 32
         if "64" in arch:
             bits = 64
