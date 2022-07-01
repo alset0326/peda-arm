@@ -823,16 +823,15 @@ class PEDA(object):
             - list of tuple (address(Int), code(String))
         """
         disassemble = self.architecture().disassemble
-        result = []
-        backward = 4 + 4 * count
-        if self.getpid() and not self.is_address(address - backward):
-            return None
-        codes = disassemble(address - backward, address)
-        if codes[-1].get('addr') != address or len(codes) <= count:
-            return None
-        for code in codes[-count - 1:-1]:
-            result.append((code.get('addr'), code.get('asm')))
-        return result
+        backward_start = 4 + 4 * count
+        for backward in range(backward_start):
+            if self.getpid() and not self.is_address(address - backward):
+                return None
+            codes = disassemble(address - backward, address)
+            if codes[-1].get('addr') != address or len(codes) <= count or '(bad)' in codes[0].get('asm'):
+                continue
+            result = [(code.get('addr'), code.get('asm')) for code in codes[-count - 1:-1]]
+            return result
 
     @memoized
     def current_inst(self, address):
