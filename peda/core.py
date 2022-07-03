@@ -824,10 +824,11 @@ class PEDA(object):
         """
         disassemble = self.architecture().disassemble
         backward_start = 4 + 4 * count
-        for backward in range(backward_start):
-            if self.getpid() and not self.is_address(address - backward):
+        for backward in range(backward_start, 2 * backward_start):
+            address_start = address - backward
+            if self.getpid() and not self.is_address(address_start):
                 return None
-            codes = disassemble(address - backward, address)
+            codes = disassemble(address_start, address)
             if codes[-1].get('addr') != address or len(codes) <= count:
                 continue
             for code in codes:
