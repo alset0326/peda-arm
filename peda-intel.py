@@ -2009,7 +2009,7 @@ if __name__ == '__main__':
     peda = PEDA(asm)
     # filter reg with name len
     peda_registers_func = peda.registers
-    peda.registers = lambda: [i for i in peda_registers_func() if 2 < len(i.name) < 6]
+    peda.registers = lambda: [i for i in peda_registers_func() if not i.name.endswith('s')]
     pedacmd = IntelPEDACmd(peda, PEDAFILE, asm)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
