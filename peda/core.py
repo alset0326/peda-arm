@@ -824,7 +824,7 @@ class PEDA(object):
         """
         disassemble = self.architecture().disassemble
         backward_start = 4 + 4 * count
-        for backward in range(backward_start, 2 * backward_start):
+        for backward in range(backward_start, 4 * backward_start):
             address_start = address - backward
             if self.getpid() and not self.is_address(address_start):
                 return None
