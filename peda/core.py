@@ -828,8 +828,11 @@ class PEDA(object):
             if self.getpid() and not self.is_address(address - backward):
                 return None
             codes = disassemble(address - backward, address)
-            if codes[-1].get('addr') != address or len(codes) <= count or '(bad)' in codes[0].get('asm'):
+            if codes[-1].get('addr') != address or len(codes) <= count:
                 continue
+            for code in codes:
+                if '(bad)' in code.get('asm'):
+                    continue
             result = [(code.get('addr'), code.get('asm')) for code in codes[-count - 1:-1]]
             return result
 
