@@ -30,7 +30,7 @@ except ImportError:
 __version__ = 'alpha-1.0'
 
 
-class Asm(AsmBase):
+class Asm:
     """
     Wrapper class for assemble/disassemble using as
     """
@@ -185,17 +185,6 @@ class Asm(AsmBase):
                 (addr, bytes, code) = m.groups()
                 sc = '"0x%s"' % bytes
                 shellcode += [(sc, "0x" + addr, code.strip())]
-
-        maxlen = max([len(x[0]) for x in shellcode])
-        text = ""
-        for (sc, addr, code) in shellcode:
-            text += "%s # %s:    %s\n" % (sc.ljust(maxlen + 1), addr, code)
-
-        return text
-
-    def objdump_disasm_search(self, name, search):
-        return execute_external_command(
-            "%s -z --prefix-addresses -d '%s' | grep '%s'" % (self.OBJDUMP, name, search))
 
 
 # Define syscall dict {number:[function_name,name,params_num,[params...]]}
@@ -489,12 +478,10 @@ class ArmPEDACmd(PEDACmd):
             MYNAME [keyword] [mapname1,mapname2]
         """
         (keyword, mapname) = normalize_argv(arg, 2)
-        # todo
         if keyword:
             self.stepuntil("b.*%s" % keyword, mapname)
         else:
             self.stepuntil("b", mapname)
-        return
 
     def _testjump(self, inst=None):
         """
@@ -617,6 +604,7 @@ class ArmPEDACmd(PEDACmd):
         if not self._is_running():
             return
 
+        peda = self.peda
         pc = peda.getpc()
         if peda.is_address(pc):
             inst = peda.get_disasm(pc)
@@ -645,7 +633,7 @@ class ArmPEDACmd(PEDACmd):
                     text += " |->"
                     if 'x' in opcode:
                         current_mode = peda.execute_redirect('show arm force-mode')
-                        match = re.search('"(.*)"', current_mode)
+                        match = re.search(r'"(\S*)"', current_mode)
                         if match:
                             current_mode = match.group(1)
                         else:
@@ -853,7 +841,7 @@ class ArmPEDACmd(PEDACmd):
         if arch is None:
             bits = self.peda.getbits()
             arch = 'arm' if bits == 32 else 'aarch64'
-        return self.asm.assemble(asmcode, arch)
+        return asm.assemble(asmcode, arch)
 
     def assemble(self, *arg):
         """
@@ -931,7 +919,7 @@ class ArmPEDACmd(PEDACmd):
             inst_code += bincode
             msg('hexify: "%s"' % to_hexstr(bincode))
 
-        text = self.asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
+        text = asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
         if text:
             msg("Assembled%s instructions:" % ("/Executed" if exec_mode else ""))
             msg(text)
@@ -948,11 +936,11 @@ class ArmPEDACmd(PEDACmd):
 asm = peda = pedacmd = None
 
 if __name__ == '__main__':
-    info('Checking cross complie toolchains')
+    info('Checking cross compile toolchains')
     asm = Asm()
     info('Init PEDA main section.')
-    peda = PEDA(asm)
-    pedacmd = ArmPEDACmd(peda, PEDAFILE, asm)
+    peda = PEDA()
+    pedacmd = ArmPEDACmd(peda, PEDAFILE)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
     # register "peda" command in gdb
@@ -968,18 +956,12 @@ if __name__ == '__main__':
             pedacmd._alias(cmd, cmd, False)
 
     # custom hooks
-    peda.define_user_command("hook-stop", "peda context\nsession autosave")
+    peda.define_user_command("hook-stop", "peda context")
 
     # custom command aliases, add any alias you want
     pedacmd._alias("phelp", "help")
     pedacmd._alias("pset", "set")
     pedacmd._alias("pshow", "show")
-    pedacmd._alias("pbreak", "pltbreak")
-    pedacmd._alias("pattc", "pattern_create")
-    pedacmd._alias("patto", "pattern_offset")
-    pedacmd._alias("patta", "pattern_arg")
-    pedacmd._alias("patte", "pattern_env")
-    pedacmd._alias("patts", "pattern_search")
     pedacmd._alias("find", "searchmem")  # override gdb find command
     pedacmd._alias("stack", "telescope $sp")
     pedacmd._alias("viewmem", "telescope")

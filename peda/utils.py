@@ -32,6 +32,9 @@ from peda import config
 from peda import six
 from peda.six import StringIO
 
+# we use a cache to save all memoized object
+_CACHES = []
+
 
 # http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
 # http://stackoverflow.com/questions/8856164/class-decorator-decorating-method-in-python
@@ -47,6 +50,7 @@ class memoized(object):
         self.instance = None  # bind with instance class of decorated method
         self.cache = {}
         self.__doc__ = inspect.getdoc(self.func)
+        _CACHES.append(self)
 
     def __call__(self, *args, **kwargs):
         key = (self.instance, args) + tuple(kwargs.items())
@@ -60,7 +64,7 @@ class memoized(object):
             self.cache[key] = value
             return value
         except TypeError:
-            # uncachable -- for instance, passing a list as an argument.
+            # unhashable -- for instance, passing a list as an argument.
             # Better to not cache than to blow up entirely.
             if self.instance is None:
                 return self.func(*args, **kwargs)
@@ -82,24 +86,9 @@ class memoized(object):
         self.cache.clear()
 
 
-def reset_cache(module=None):
-    """
-    Reset memoized caches of an instance/module
-    """
-    if module is None:
-        module = sys.modules['__main__']
-
-    for m in dir(module):
-        m = getattr(module, m)
-        if isinstance(m, memoized):
-            m._reset()
-        else:
-            for f in dir(m):
-                f = getattr(m, f)
-                if isinstance(f, memoized):
-                    f._reset()
-
-    return True
+def reset_cache():
+    for m in _CACHES:
+        m._reset()
 
 
 def tmpfile(pref="peda-", is_binary_file=False):
@@ -186,7 +175,9 @@ class message(object):
 
     def flush(self):
         if not self.buffering:
-            raise ValueError("Tried to flush a message that is not bufferising.")
+            # Tried to flush a message that is not bufferising.
+            self.out.flush()
+            return
         self.buffering -= 1
 
         # We only need to flush if this is the lowest recursion level.
@@ -384,14 +375,14 @@ def to_address(num):
         return "0x%08x" % num
 
 
-def to_int(val):
+def to_int(val, base=0):
     """
     Convert a string to int number
     """
     if val is None:
         return None
     try:
-        return int(str(val), 0)
+        return int(str(val), base)
     except:
         return None
 
@@ -734,161 +725,162 @@ def format_disasm_code_intel(code, nearby=None):
     return '\n'.join(results)
 
 
-def cyclic_pattern_charset(charset_type=None):
-    """
-    Generate charset for cyclic pattern
-
-    Args:
-        - charset_type: charset type
-            0: basic (0-9A-Za-z)
-            1: extended (default)
-            2: maximum (almost printable chars)
-
-    Returns:
-        - list of charset
-    """
-
-    charset = []
-    charset += ["ABCDEFGHIJKLMNOPQRSTUVWXYZ"]  # string.uppercase
-    charset += ["abcdefghijklmnopqrstuvwxyz"]  # string.lowercase
-    charset += ["0123456789"]  # string.digits
-
-    if not charset_type:
-        charset_type = config.Option.get("pattern")
-
-    if charset_type == 1:  # extended type
-        charset[1] = "%$-;" + re.sub("[sn]", "", charset[1])
-        charset[2] = "sn()" + charset[2]
-
-    if charset_type == 2:  # maximum type
-        charset += ['!"#$%&\()*+,-./:;<=>?@[]^_{|}~']  # string.punctuation
-
-    mixed_charset = mixed = ''
-    k = 0
-    while True:
-        for i in range(0, len(charset)): mixed += charset[i][k:k + 1]
-        if not mixed: break
-        mixed_charset += mixed
-        mixed = ''
-        k += 1
-
-    return mixed_charset
-
-
-def de_bruijn(charset, n, maxlen):
-    """
-    Generate the De Bruijn Sequence up to `maxlen` characters for the charset `charset`
-    and subsequences of length `n`.
-    Algorithm modified from wikipedia http://en.wikipedia.org/wiki/De_Bruijn_sequence
-    """
-    k = len(charset)
-    a = [0] * k * n
-    sequence = []
-
-    def db(t, p):
-        if len(sequence) == maxlen:
-            return
-
-        if t > n:
-            if n % p == 0:
-                for j in range(1, p + 1):
-                    sequence.append(charset[a[j]])
-                    if len(sequence) == maxlen:
-                        return
-        else:
-            a[t] = a[t - p]
-            db(t + 1, p)
-            for j in range(a[t - p] + 1, k):
-                a[t] = j
-                db(t + 1, t)
-
-    db(1, 1)
-    return ''.join(sequence)
-
-
-@memoized
-def cyclic_pattern(size=None, start=None, charset_type=None):
-    """
-    Generate a cyclic pattern
-
-    Args:
-        - size: size of generated pattern (Int)
-        - start: the start offset of the generated pattern (Int)
-        - charset_type: charset type
-            0: basic (0-9A-Za-z)
-            1: extended (default)
-            2: maximum (almost printable chars)
-
-    Returns:
-        - pattern text (byte string) (str in Python 2; bytes in Python 3)
-    """
-    charset = config.Option.get("p_charset")
-    if not charset:
-        charset = cyclic_pattern_charset(charset)
-    else:
-        charset = ''.join(set(charset))
-
-    if start is None:
-        start = 0
-    if size is None:
-        size = 0x10000
-
-    size += start
-
-    pattern = de_bruijn(charset, 3, size)
-
-    return pattern[start:size].encode('utf-8')
-
-
-@memoized
-def cyclic_pattern_offset(value):
-    """
-    Search a value if it is a part of cyclic pattern
-
-    Args:
-        - value: value to search for (String/Int)
-
-    Returns:
-        - offset in pattern if found
-    """
-    pattern = cyclic_pattern()
-    if to_int(value) is None:
-        search = value.encode('utf-8')
-    else:
-        search = hex2str(to_int(value))
-
-    pos = pattern.find(search)
-    return pos if pos != -1 else None
-
-
-def cyclic_pattern_search(buf):
-    """
-    Search all cyclic pattern pieces in a buffer
-
-    Args:
-        - buf: buffer to search for (String)
-
-    Returns:
-        - list of tuple (buffer_offset, pattern_len, pattern_offset)
-    """
-    result = []
-    pattern = cyclic_pattern()
-
-    p = re.compile(b"[" + re.escape(to_binary_string(cyclic_pattern_charset())) + b"]{4,}")
-    found = p.finditer(buf)
-    found = list(found)
-    for m in found:
-        s = buf[m.start():m.end()]
-        i = pattern.find(s)
-        k = 0
-        while i == -1 and len(s) > 4:
-            s = s[1:]
-            k += 1
-            i = pattern.find(s)
-        if i != -1:
-            result += [(m.start() + k, len(s), i)]
-
-    return result
+#
+# def cyclic_pattern_charset(charset_type=None):
+#     """
+#     Generate charset for cyclic pattern
+#
+#     Args:
+#         - charset_type: charset type
+#             0: basic (0-9A-Za-z)
+#             1: extended (default)
+#             2: maximum (almost printable chars)
+#
+#     Returns:
+#         - list of charset
+#     """
+#
+#     charset = []
+#     charset += ["ABCDEFGHIJKLMNOPQRSTUVWXYZ"]  # string.uppercase
+#     charset += ["abcdefghijklmnopqrstuvwxyz"]  # string.lowercase
+#     charset += ["0123456789"]  # string.digits
+#
+#     if not charset_type:
+#         charset_type = config.Option.get("pattern")
+#
+#     if charset_type == 1:  # extended type
+#         charset[1] = "%$-;" + re.sub("[sn]", "", charset[1])
+#         charset[2] = "sn()" + charset[2]
+#
+#     if charset_type == 2:  # maximum type
+#         charset += ['!"#$%&\()*+,-./:;<=>?@[]^_{|}~']  # string.punctuation
+#
+#     mixed_charset = mixed = ''
+#     k = 0
+#     while True:
+#         for i in range(0, len(charset)): mixed += charset[i][k:k + 1]
+#         if not mixed: break
+#         mixed_charset += mixed
+#         mixed = ''
+#         k += 1
+#
+#     return mixed_charset
+#
+#
+# def de_bruijn(charset, n, maxlen):
+#     """
+#     Generate the De Bruijn Sequence up to `maxlen` characters for the charset `charset`
+#     and subsequences of length `n`.
+#     Algorithm modified from wikipedia http://en.wikipedia.org/wiki/De_Bruijn_sequence
+#     """
+#     k = len(charset)
+#     a = [0] * k * n
+#     sequence = []
+#
+#     def db(t, p):
+#         if len(sequence) == maxlen:
+#             return
+#
+#         if t > n:
+#             if n % p == 0:
+#                 for j in range(1, p + 1):
+#                     sequence.append(charset[a[j]])
+#                     if len(sequence) == maxlen:
+#                         return
+#         else:
+#             a[t] = a[t - p]
+#             db(t + 1, p)
+#             for j in range(a[t - p] + 1, k):
+#                 a[t] = j
+#                 db(t + 1, t)
+#
+#     db(1, 1)
+#     return ''.join(sequence)
+#
+#
+# @memoized
+# def cyclic_pattern(size=None, start=None, charset_type=None):
+#     """
+#     Generate a cyclic pattern
+#
+#     Args:
+#         - size: size of generated pattern (Int)
+#         - start: the start offset of the generated pattern (Int)
+#         - charset_type: charset type
+#             0: basic (0-9A-Za-z)
+#             1: extended (default)
+#             2: maximum (almost printable chars)
+#
+#     Returns:
+#         - pattern text (byte string) (str in Python 2; bytes in Python 3)
+#     """
+#     charset = config.Option.get("p_charset")
+#     if not charset:
+#         charset = cyclic_pattern_charset(charset)
+#     else:
+#         charset = ''.join(set(charset))
+#
+#     if start is None:
+#         start = 0
+#     if size is None:
+#         size = 0x10000
+#
+#     size += start
+#
+#     pattern = de_bruijn(charset, 3, size)
+#
+#     return pattern[start:size].encode('utf-8')
+#
+#
+# @memoized
+# def cyclic_pattern_offset(value):
+#     """
+#     Search a value if it is a part of cyclic pattern
+#
+#     Args:
+#         - value: value to search for (String/Int)
+#
+#     Returns:
+#         - offset in pattern if found
+#     """
+#     pattern = cyclic_pattern()
+#     if to_int(value) is None:
+#         search = value.encode('utf-8')
+#     else:
+#         search = hex2str(to_int(value))
+#
+#     pos = pattern.find(search)
+#     return pos if pos != -1 else None
+#
+#
+# def cyclic_pattern_search(buf):
+#     """
+#     Search all cyclic pattern pieces in a buffer
+#
+#     Args:
+#         - buf: buffer to search for (String)
+#
+#     Returns:
+#         - list of tuple (buffer_offset, pattern_len, pattern_offset)
+#     """
+#     result = []
+#     pattern = cyclic_pattern()
+#
+#     p = re.compile(b"[" + re.escape(to_binary_string(cyclic_pattern_charset())) + b"]{4,}")
+#     found = p.finditer(buf)
+#     found = list(found)
+#     for m in found:
+#         s = buf[m.start():m.end()]
+#         i = pattern.find(s)
+#         k = 0
+#         while i == -1 and len(s) > 4:
+#             s = s[1:]
+#             k += 1
+#             i = pattern.find(s)
+#         if i != -1:
+#             result += [(m.start() + k, len(s), i)]
+#
+#     return result
 
 
 def _decode_string_escape_py2(str_):
