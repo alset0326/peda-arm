@@ -761,16 +761,18 @@ class PEDA(object):
         if m:
             return to_int(m.group(1))
 
-        # next we check if in gdb comment
-        m = re.match(r"[^#]+#\s*(0x\S*)", inst)
-        if m:
-            return to_int(m.group(1))
-
         # we try to eval
         m = re.match(r"[^:]*:\s*\S*\s*(\S*)", inst)
         if m:
             target = self.parse_and_eval("%s" % m.group(1))
-            return to_int(target)
+            ret = to_int(target)
+            if ret:
+                return ret
+
+        # finally we check if in gdb comment
+        m = re.match(r"[^#]+#\s*(0x\S*)", inst)
+        if m:
+            return to_int(m.group(1))
 
         return None
 
