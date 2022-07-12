@@ -1042,7 +1042,8 @@ if __name__ == '__main__':
     peda = PEDA()
     # skip selector registers
     peda_registers_func = peda.registers
-    peda.registers = lambda: [i for i in peda_registers_func() if not i.name.endswith('s')]
+    peda.registers = lambda: [i for i in peda_registers_func() if
+                              not i.name.endswith('s') and not i.name.startswith('k')]
     pedacmd = IntelPEDACmd(peda, PEDAFILE)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
