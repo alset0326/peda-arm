@@ -1038,7 +1038,8 @@ class PEDA(object):
         if not buf:
             return 0
 
-        return self.inferior().write_memory(address, buf)
+        self.inferior().write_memory(address, buf)
+        return len(buf)
 
     def write_int(self, address, value, intsize=None):
         """
@@ -2715,9 +2716,9 @@ class PEDACmd(object):
                 error("Odd-length hex string")
                 return
             mem = codecs.decode(mem, 'hex')
-            bytes = self.peda.writemem(address, mem)
-            if bytes > 0:
-                info("Written %d bytes to 0x%x" % (bytes, address))
+            count = self.peda.writemem(address, mem)
+            if count > 0:
+                info("Written %d bytes to 0x%x" % (count, address))
             else:
                 warning("failed to write raw to memory")
         else:
