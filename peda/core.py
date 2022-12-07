@@ -2237,7 +2237,7 @@ class PEDACmd(object):
             MYNAME address | function
         """
         (address,) = normalize_argv(arg, 1)
-        self.peda.set_breakpoint(address, temp=True)
+        self.peda.execute_redirect('tb *0x%x' % address)
         pc = self.peda.getpc()
         if pc is None:
             PEDA.execute("run")

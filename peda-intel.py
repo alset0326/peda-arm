@@ -182,10 +182,10 @@ class IntelPEDACmd(PEDACmd):
             if not symbol:
                 warning("cannot retrieve info of function '%s'" % function)
                 return
-            self.peda.set_breakpoint("*0x%x" % symbol[function + "@plt"])
+            self.peda.execute_redirect("b *0x%x" % symbol[function + "@plt"])
 
         else:  # addressed function
-            self.peda.set_breakpoint("*%s" % function)
+            self.peda.execute_redirect("b *%s" % function)
 
         self.peda.execute("set %s = $bpnum" % bnum)
         tmpfd = tmpfile()
