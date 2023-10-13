@@ -842,6 +842,260 @@ class ArmPEDACmd(PEDACmd):
             bits = self.peda.getbits()
             arch = 'arm' if bits == 32 else 'aarch64'
         return asm.assemble(asmcode, arch)
+    
+
+
+
+    # cyclic_pattern()
+    def pattern_create(self, *arg):
+        """
+        Generate a cyclic pattern
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME size [file]
+        """
+
+        (size, filename) = normalize_argv(arg, 2)
+        if size is None:
+            self._missing_argument()
+
+        pattern = cyclic_pattern(size)
+        if filename is not None:
+            open(filename, "wb").write(pattern)
+            msg("Writing pattern of %d chars to filename \"%s\"" % (len(pattern), filename))
+        else:
+            msg("'" + pattern.decode('utf-8') + "'")
+
+        return
+
+    # cyclic_pattern()
+    def pattern_offset(self, *arg):
+        """
+        Search for offset of a value in cyclic pattern
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME value
+        """
+
+        (value,) = normalize_argv(arg, 1)
+        if value is None:
+            self._missing_argument()
+
+        pos = cyclic_pattern_offset(value)
+        if pos is None:
+            msg("%s not found in pattern buffer" % value)
+        else:
+            msg("%s found at offset: %d" % (value, pos))
+
+        return
+
+    # cyclic_pattern(), searchmem_*()
+    def pattern_search(self, *arg):
+        """
+        Search a cyclic pattern in registers and memory
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME
+        """
+        def nearby_offset(v):
+            for offset in range(-128, 128, 4):
+                pos = cyclic_pattern_offset(v + offset)
+                if pos is not None:
+                    return (pos, offset)
+            return None
+
+        if not self._is_running():
+            return
+
+        reg_result = {}
+        regs = peda.getregs()
+
+        # search for registers with value in pattern buffer
+        for (r, v) in regs.items():
+            if len(to_hex(v)) < 8: continue
+            res = nearby_offset(v)
+            if res:
+                reg_result[r] = res
+
+        if reg_result:
+            msg("Registers contain pattern buffer:", "red")
+            for (r, (p, o)) in reg_result.items():
+                msg("%s+%d found at offset: %d" % (r.upper(), o, p))
+        else:
+            msg("No register contains pattern buffer")
+
+        # search for registers which point to pattern buffer
+        reg_result = {}
+        for (r, v) in regs.items():
+            if not peda.is_address(v): continue
+            chain = peda.examine_mem_reference(v)
+            (v, t, vn) = chain[-1]
+            if not vn: continue
+            o = cyclic_pattern_offset(vn.strip("'").strip('"')[:4])
+            if o is not None:
+                reg_result[r] = (len(chain), len(vn)-2, o)
+
+        if reg_result:
+            msg("Registers point to pattern buffer:", "yellow")
+            for (r, (d, l, o)) in reg_result.items():
+                msg("[%s] %s offset %d - size ~%d" % (r.upper(), "-->"*d, o, l))
+        else:
+            msg("No register points to pattern buffer")
+
+        # search for pattern buffer in memory
+        maps = peda.get_vmmap()
+        search_result = []
+        for (start, end, perm, name) in maps:
+            if "w" not in perm: continue # only search in writable memory
+            res = cyclic_pattern_search(peda.dumpmem(start, end))
+            for (a, l, o) in res:
+                a += start
+                search_result += [(a, l, o)]
+
+        sp = peda.getreg("sp")
+        if search_result:
+            msg("Pattern buffer found at:", "green")
+            for (a, l, o) in search_result:
+                ranges = peda.get_vmrange(a)
+                text = "%s : offset %4d - size %4d" % (to_address(a), o, l)
+                if ranges[3] == "[stack]":
+                    text += " ($sp + %s [%d dwords])" % (to_hex(a-sp), (a-sp)//4)
+                else:
+                    text += " (%s)" % ranges[3]
+                msg(text)
+        else:
+            msg("Pattern buffer not found in memory")
+
+        # search for references to pattern buffer in memory
+        ref_result = []
+        for (a, l, o) in search_result:
+            res = peda.searchmem_by_range("all", "0x%x" % a)
+            ref_result += [(x[0], a) for x in res]
+        if len(ref_result) > 0:
+            msg("References to pattern buffer found at:", "blue")
+            for (a, v) in ref_result:
+                ranges = peda.get_vmrange(a)
+                text = "%s : %s" % (to_address(a), to_address(v))
+                if ranges[3] == "[stack]":
+                    text += " ($sp + %s [%d dwords])" % (to_hex(a-sp), (a-sp)//4)
+                else:
+                    text += " (%s)" % ranges[3]
+                msg(text)
+        else:
+            msg("Reference to pattern buffer not found in memory")
+
+        return
+
+    # cyclic_pattern(), writemem()
+    def pattern_patch(self, *arg):
+        """
+        Write a cyclic pattern to memory
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME address size
+        """
+
+        (address, size) = normalize_argv(arg, 2)
+        if size is None:
+            self._missing_argument()
+
+        pattern = cyclic_pattern(size)
+        num_bytes_written = peda.writemem(address, pattern)
+        if num_bytes_written:
+            msg("Written %d chars of cyclic pattern to 0x%x" % (size, address))
+        else:
+            msg("Failed to write to memory")
+
+        return
+
+    # cyclic_pattern()
+    def pattern_arg(self, *arg):
+        """
+        Set argument list with cyclic pattern
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME size1 [size2,offset2] ...
+        """
+
+        if not arg:
+            self._missing_argument()
+
+        arglist = []
+        for a in arg:
+            (size, offset) = (a + ",").split(",")[:2]
+            if offset:
+                offset = to_int(offset)
+            else:
+                offset = 0
+            size = to_int(size)
+            if size is None or offset is None:
+                self._missing_argument()
+
+            # try to generate unique, non-overlapped patterns
+            if arglist and offset == 0:
+                offset = sum(arglist[-1])
+            arglist += [(size, offset)]
+
+        patterns = []
+        for (s, o) in arglist:
+            patterns += ["\'%s\'" % cyclic_pattern(s, o).decode('utf-8')]
+        peda.execute("set arg %s" % " ".join(patterns))
+        msg("Set %d arguments to program" % len(patterns))
+
+        return
+
+    # cyclic_pattern()
+    def pattern_env(self, *arg):
+        """
+        Set environment variable with a cyclic pattern
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME ENVNAME size[,offset]
+        """
+
+        (env, size) = normalize_argv(arg, 2)
+        if size is None:
+            self._missing_argument()
+
+        (size, offset) = (arg[1] + ",").split(",")[:2]
+        size = to_int(size)
+        if offset:
+            offset = to_int(offset)
+        else:
+            offset = 0
+        if size is None or offset is None:
+            self._missing_argument()
+
+        peda.execute("set env %s %s" % (env, cyclic_pattern(size, offset).decode('utf-8')))
+        msg("Set environment %s = cyclic_pattern(%d, %d)" % (env, size, offset))
+
+        return
+
+    def pattern(self, *arg):
+        """
+        Generate, search, or write a cyclic pattern to memory
+        Set "pattern" option for basic/extended pattern type
+        Usage:
+            MYNAME create size [file]
+            MYNAME offset value
+            MYNAME search
+            MYNAME patch address size
+            MYNAME arg size1 [size2,offset2]
+            MYNAME env size[,offset]
+        """
+
+        options = ["create", "offset", "search", "patch", "arg", "env"]
+        (opt,) = normalize_argv(arg, 1)
+        if opt is None or opt not in options:
+            self._missing_argument()
+
+        func = getattr(self, "pattern_%s" % opt)
+        func(*arg[1:])
+
+        return
+    pattern.options = ["create", "offset", "search", "patch", "arg", "env"]
+
+
 
     def assemble(self, *arg):
         """
@@ -970,6 +1224,11 @@ if __name__ == '__main__':
     Alias("arm", "set arm force-mode arm")
     Alias("thumb", "set arm force-mode thumb")
     Alias("auto", "set arm force-mode auto")
+    Alias("pattc", "peda pattern_create")
+    Alias("patto", "peda pattern_offset")
+    Alias("patta", "peda pattern_arg")
+    Alias("patte", "peda pattern_env")
+    Alias("patts", "peda pattern_search")
 
     PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
 
