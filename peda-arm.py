@@ -21,6 +21,8 @@ while os.path.islink(PEDAFILE):
 sys.path.insert(0, os.path.dirname(PEDAFILE))
 
 from peda import *
+# import modules from lib/
+from lib.utils import *
 
 try:
     import zlib
