@@ -610,7 +610,7 @@ def format_disasm_code_arm(code, nearby=None):
             results.append(line)
         else:
             color = style = None
-            m = re.search(".*(0x\S*).*:\s*(\S*)", line)
+            m = re.search(r".*(0x\S*).*:\s*(\S*)", line)
             if not m:  # failed to parse
                 results.append(line)
                 continue
@@ -685,7 +685,7 @@ def format_disasm_code_intel(code, nearby=None):
             results.append(line)
         else:
             color = style = None
-            m = re.search(".*(0x\S*).*:\s*(\S*)", line)
+            m = re.search(r".*(0x\S*).*:\s*(\S*)", line)
             if not m:  # failed to parse
                 results.append(line)
                 continue

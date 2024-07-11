@@ -176,7 +176,7 @@ class Asm:
 
         shellcode = []
         # '   0:   e49df004        pop     {pc}            ; (ldr pc, [sp], #4)'
-        pattern = re.compile("\s*([0-9a-f]+):\s*([0-9a-f]+)(.+)")
+        pattern = re.compile(r"\s*([0-9a-f]+):\s*([0-9a-f]+)(.+)")
 
         # matches = pattern.findall(asmcode)
         for line in asmcode.splitlines():
@@ -252,7 +252,7 @@ class ArmPEDACmd(PEDACmd):
 
         if argc is None:
             # deal with regs
-            p = re.compile(":\s*(\S+)\s*(\w+),")
+            p = re.compile(r":\s*(\S+)\s*(\w+),")
             matches = p.findall(code)
             m = [r for (_, r) in matches]
 
@@ -502,7 +502,7 @@ class ArmPEDACmd(PEDACmd):
                 return None
 
         # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
-        match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
+        match = re.match(r'.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
         next_addr = self.peda.eval_target(inst)
         if next_addr is None:
             next_addr = 0
@@ -567,7 +567,7 @@ class ArmPEDACmd(PEDACmd):
                 return None
 
         # inst='=> 0xaf130bd4:\tcbz\tr0, 0xaf130be4'
-        match = re.match('.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)', inst)
+        match = re.match(r'.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)', inst)
         if not match:
             return None
         cond, r, next_addr = match.groups()
