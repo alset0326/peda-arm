@@ -270,7 +270,7 @@ class ArmPEDACmd(PEDACmd):
             else:
                 argc = 0
                 #  '0x8d08: str     r3, [sp, #20]'
-                p = re.compile(":\s*str\s*\S+,\s*\[sp.*#(.*)\]")
+                p = re.compile(r":\s*str\s*\S+,\s*\[sp.*#(.*)\]")
                 matches = p.findall(code)
                 if matches:
                     l = len(matches)
