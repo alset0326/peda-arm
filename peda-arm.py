@@ -323,7 +323,29 @@ class ArmPEDACmd(PEDACmd):
         """
         Guess the number of arguments passed to a function - x86_64
         """
-        return []
+        reg_order = ('x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7')
+
+        if to_int(argc) is None:
+            return None
+        else:
+            argc = to_int(argc)
+            args = []
+
+            # deal with regs
+            regs = self.peda.getregs()
+            for reg in reg_order:
+                if argc == 0:
+                    break
+                args.append(regs[reg])
+                argc -= 1
+            else:
+                # deal with mem
+                sp = self.peda.getreg("sp")
+                mem = self.peda.dumpmem(sp, sp + 8 * argc)
+                for i in range(argc):
+                    args.append(struct.unpack("<L", mem[i * 4:(i + 1) * 4])[0])
+
+            return args
 
     def _get_function_args(self, argc=None):
         """
@@ -502,7 +524,7 @@ class ArmPEDACmd(PEDACmd):
                 return None
 
         # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
-        match = re.match('.*:\s+(b[l|x]{0,2})(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
+        match = re.match('.*:\s+(b[l|x]{0,2})\.?(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
         next_addr = self.peda.eval_target(inst)
         if next_addr is None:
             next_addr = 0
