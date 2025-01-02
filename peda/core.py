@@ -3311,7 +3311,11 @@ class PEDACmdAlias(gdb.Command):
         completion = []
         cmds = self._command.split()
         cmd = cmds[0]
-        for opt in getattr(self.pedacmd, cmd).options:  # list of command's options
+        word = '' if not word else word
+        func = getattr(self.pedacmd, cmd)
+        if not hasattr(func, 'options'):
+            return completion
+        for opt in func.options:  # list of command's options
             if text in opt and opt not in completion:
                 completion.append(opt)
         if completion:
