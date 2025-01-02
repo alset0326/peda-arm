@@ -97,7 +97,7 @@ class Nasm:
                 return ""
 
             shellcode = []
-            pattern = re.compile("([0-9A-F]{8})\s*([^\s]*)\s*(.*)")
+            pattern = re.compile(r"([0-9A-F]{8})\s*([^\s]*)\s*(.*)")
 
             # matches = pattern.findall(asmcode)
             for line in asmcode.splitlines():
@@ -263,7 +263,7 @@ class IntelPEDACmd(PEDACmd):
         """
         if not argc:
             argc = 0
-            p = re.compile(".*mov.*\[esp(.*)\],")
+            p = re.compile(r".*mov.*\[esp(.*)\],")
             matches = p.findall(code)
             if matches:
                 l = len(matches)
@@ -297,7 +297,7 @@ class IntelPEDACmd(PEDACmd):
         arg_order = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
 
         if not argc:
-            p = re.compile(":\s*([^ ]*)\s*(.*),")
+            p = re.compile(r":\s*([^ ]*)\s*(.*),")
             matches = p.findall(code)
             regs = [r for (_, r) in matches]
             p = re.compile("di|si|dx|cx|r8|r9")
@@ -559,7 +559,7 @@ class IntelPEDACmd(PEDACmd):
         prev_depth = self.peda.backtrace_depth(peda.getreg("sp"))
         logfd = open(logname, "w")
 
-        p = re.compile(".*?:\s*[^ ]*\s*([^,]*),(.*)")
+        p = re.compile(r".*?:\s*[^ ]*\s*([^,]*),(.*)")
         while count:
             result = self.peda.stepuntil(",".join(instlist), mapname, prev_depth)
             if result is None:
@@ -571,7 +571,7 @@ class IntelPEDACmd(PEDACmd):
 
             # special case for JUMP inst
             prev_code = ""
-            if re.search("j[^m]", code.split(":\t")[-1].split()[0]):
+            if re.search(r"j[^m]", code.split(":\t")[-1].split()[0]):
                 prev_insts = self.peda.prev_inst(peda.getpc())
                 if prev_insts:
                     prev_code = "0x%x:%s" % prev_insts[0]
@@ -580,7 +580,7 @@ class IntelPEDACmd(PEDACmd):
             text = "%s%s%s" % (" " * (prev_depth - 1), " dep:%02d " % (prev_depth - 1), code.strip())
             msg(text, teefd=logfd)
 
-            if re.search("call", code.split(":\t")[-1].split()[0]):
+            if re.search(r"call", code.split(":\t")[-1].split()[0]):
                 args = self.peda.get_function_args()
                 if args:
                     for (i, a) in enumerate(args):

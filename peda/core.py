@@ -1440,7 +1440,7 @@ class PEDA(object):
                     if start <= value < end:
                         if type == "code":
                             out = self.get_disasm(value)
-                            p = re.compile(".*?0x[^ ]*?\s(.*)")
+                            p = re.compile(r".*?0x[^ ]*?\s(.*)")
                             m = p.search(out)
                             result = (to_hex(value), "code", m.group(1))
                         else:  # rodata address
@@ -1458,7 +1458,7 @@ class PEDA(object):
                     out = examine_data(value, bits)
                     result = (to_hex(value), "rodata", out.split(":", 1)[1].strip())
                 else:
-                    p = re.compile(".*?0x[^ ]*?\s(.*)")
+                    p = re.compile(r".*?0x[^ ]*?\s(.*)")
                     m = p.search(out)
                     result = (to_hex(value), "code", m.group(1))
 
@@ -1640,7 +1640,7 @@ class PEDA(object):
         if not out:
             return {}
 
-        p = re.compile("^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
+        p = re.compile(r"^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
         soheaders = p.findall(out)
         headers = [
             (to_int(start), to_int(end), hname, os.path.realpath(libname)) for (start, end, hname, libname) in soheaders
