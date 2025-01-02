@@ -1,12 +1,13 @@
-import re
-import progressbar
 import pickle
-import requests
+import re
 import zlib
+
+import progressbar
+import requests
 
 reply = requests.get('http://ascii.mastervb.net/')
 # <option value="xhelvi.flf">xhelvi.flf</option>
-pattern = re.compile('<option value="(\S+)">\S+</option>')
+pattern = re.compile(r'<option value="(\S+)">\S+</option>')
 m = pattern.findall(reply.text)
 
 print ('start!!')

@@ -97,7 +97,7 @@ class PEDA(object):
         p = re.compile(r"(.*)\[(.*)]")  # DWORD PTR [esi+eax*1]
         matches = p.search(exp)
         if not matches:
-            p = re.compile("(.*).s:(0x.*)")  # DWORD PTR ds:0xdeadbeef
+            p = re.compile(r"(.*).s:(0x.*)")  # DWORD PTR ds:0xdeadbeef
             matches = p.search(exp)
 
         if matches:
@@ -807,7 +807,7 @@ class PEDA(object):
             maps = []
             mpath = "/proc/%s/map" % pid
             # 0x8048000 0x8049000 1 0 0xc36afdd0 r-x 1 0 0x1000 COW NC vnode /path/to/file NCH -1
-            pattern = re.compile("0x([0-9a-f]*) 0x([0-9a-f]*)(?: [^ ]*){3} ([rwx-]*)(?: [^ ]*){6} ([^ ]*)")
+            pattern = re.compile(r"0x([0-9a-f]*) 0x([0-9a-f]*)(?: [^ ]*){3} ([rwx-]*)(?: [^ ]*){6} ([^ ]*)")
 
             if remote:  # remote target
                 out = self.read_from_remote(mpath)
@@ -1554,7 +1554,7 @@ class PEDA(object):
             - entry address (Int)
         """
         out = PEDA.execute_redirect("info files")
-        p = re.compile("Entry point: (\S*)")
+        p = re.compile(r"Entry point: (\S*)")
         if out:
             m = p.search(out)
             if m:
@@ -1582,7 +1582,7 @@ class PEDA(object):
         if not out:
             return {}
 
-        p = re.compile("^ *\S+ +(0x[^-]+)->(0x[^ ]+) at (\S+): +(\S+) +(.*)$", re.M)
+        p = re.compile(r"^ *\S+ +(0x[^-]+)->(0x[^ ]+) at (\S+): +(\S+) +(.*)$", re.M)
         matches = p.findall(out)
 
         for (start, end, offset, hname, attr) in matches:
@@ -2152,7 +2152,7 @@ class PEDACmd(object):
         fdlist = os.listdir("/proc/%d/fd" % pid)
         for fd in fdlist:
             rpath = os.readlink("/proc/%d/fd/%s" % (pid, fd))
-            sock = re.search("socket:\[(.*)\]", rpath)
+            sock = re.search(r"socket:\[(.*)\]", rpath)
             if sock:
                 spath = execute_external_command("netstat -aen | grep %s" % sock.group(1))
                 if spath:
@@ -2162,11 +2162,11 @@ class PEDACmd(object):
         # uid/gid, pid, ppid
         info["pid"] = pid
         status = open("/proc/%d/status" % pid).read()
-        ppid = re.search("PPid:\s*([^\s]*)", status).group(1)
+        ppid = re.search(r"PPid:\s*([^\s]*)", status).group(1)
         info["ppid"] = to_int(ppid) if ppid else -1
-        uid = re.search("Uid:\s*([^\n]*)", status).group(1)
+        uid = re.search("Uid:\\s*([^\n]*)", status).group(1)
         info["uid"] = [to_int(id) for id in uid.split()]
-        gid = re.search("Gid:\s*([^\n]*)", status).group(1)
+        gid = re.search("Gid:\\s*([^\n]*)", status).group(1)
         info["gid"] = [to_int(id) for id in gid.split()]
 
         options = ["exe", "fd", "pid", "ppid", "uid", "gid"]

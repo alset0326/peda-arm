@@ -553,7 +553,7 @@ def format_disasm_code(code, nearby=None):
         else:
             color = style = None
             prefix = line.split(":\t")[0]
-            addr = re.search("(0x\S*)", prefix)
+            addr = re.search(r"(0x\S*)", prefix)
             if addr:
                 addr = to_int(addr.group(1))
             else:
@@ -627,7 +627,7 @@ def format_disasm_code_arm(code, nearby=None):
                     break
 
             prefix = line.split(":\t")[0]
-            addr = re.search("(0x\S*)", prefix)
+            addr = re.search(r"(0x\S*)", prefix)
             if addr:
                 addr = to_int(addr.group(1))
             else:
@@ -702,7 +702,7 @@ def format_disasm_code_intel(code, nearby=None):
                     break
 
             prefix = line.split(":\t")[0]
-            addr = re.search("(0x\S*)", prefix)
+            addr = re.search(r"(0x\S*)", prefix)
             if addr:
                 addr = to_int(addr.group(1))
             else:
