@@ -2164,9 +2164,9 @@ class PEDACmd(object):
         status = open("/proc/%d/status" % pid).read()
         ppid = re.search(r"PPid:\s*([^\s]*)", status).group(1)
         info["ppid"] = to_int(ppid) if ppid else -1
-        uid = re.search("Uid:\\s*([^\n]*)", status).group(1)
+        uid = re.search(r"Uid:\s*([^\n]*)", status).group(1)
         info["uid"] = [to_int(id) for id in uid.split()]
-        gid = re.search("Gid:\\s*([^\n]*)", status).group(1)
+        gid = re.search(r"Gid:\s*([^\n]*)", status).group(1)
         info["gid"] = [to_int(id) for id in gid.split()]
 
         options = ["exe", "fd", "pid", "ppid", "uid", "gid"]
