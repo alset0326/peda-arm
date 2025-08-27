@@ -2,8 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys
-
 from peda.utils import *
 
 
@@ -25,7 +23,7 @@ def invoke(peda, *arg):
     """
     Print pc until target pc
     Usage:
-        sample target-pc [out-file]
+        tracepc target-pc [out-file]
     """
 
     (target_pc, filename) = normalize_argv(arg, 2)
@@ -33,7 +31,7 @@ def invoke(peda, *arg):
     if target_pc is None:
         raise Exception()
 
-    peda.save_user_command("hook-stop")  # disable hook-stop to speedup
+    peda.deactivate_user_command("hook-stop")  # disable hook-stop to speedup
     info("Stepping through, Ctrl-C to stop...")
     if filename is not None:
         f = open(filename, 'wt')

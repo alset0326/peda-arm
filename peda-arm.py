@@ -29,164 +29,6 @@ except ImportError:
 
 __version__ = 'alpha-1.0'
 
-
-class Asm:
-    """
-    Wrapper class for assemble/disassemble using as
-    """
-
-    def __init__(self):
-        # Check cross compile toolchains
-        PREFIXES = "arm-none-eabi- arm-eabi- arm-androideabi- arm-none-linux-gnueabi- arm-linux-androideabi- " \
-                   "arm-linux-android- arm-linux-eabi- arm-linux-gnueabi- arm-linux-gnueabihf-"
-        prefix = ''
-        for i in PREFIXES.split():
-            command = "%sobjdump" % i
-            if which(command):
-                prefix = i
-                break
-        if prefix == '':
-            warning('Cross compile toolchain not found! '
-                    'You can install it from https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads')
-            return
-
-        self.PREFIX = prefix
-        self.READELF = "%sreadelf" % prefix
-        self.OBJDUMP = "%sobjdump" % prefix
-        self.OBJCOPY = '%sobjcopy' % prefix
-        self.AS = '%sas' % prefix
-
-    def assemble(self, asmcode, arch='arm'):
-        """
-        Assemble ASM instructions using AS
-            - asmcode: input ASM instructions, multiple instructions are separated by ";" (String)
-            - arch: arm / aarch64 / thumb / thumb64 assembly
-
-        Returns:
-            - bin code (raw bytes)
-        """
-        if self.PREFIX == '':
-            warning('Cross compile toolchain not found! ')
-            return
-        # todo aarch64 and thumb64
-        gas = self.AS
-        assemblers = {
-            'arm': gas,
-            'aarch64': '%s --64' % gas,
-            'thumb': '%s -mthumb' % gas
-        }
-        arch = arch.lower()
-        if '6' in arch:
-            arch = 'aarch64'
-        elif arch.startswith('t'):
-            arch = 'thumb'
-        else:
-            arch = 'arm'
-        assembler = assemblers[arch]
-
-        asmcode = asmcode.strip('"').strip("'")
-        asmcode = asmcode.replace(";", "\n")
-        asmcode = decode_string_escape(asmcode)
-
-        infd = tmpfile()
-        elffd = tmpfile(is_binary_file=True)
-        infd.write(asmcode)
-        infd.flush()
-        execute_external_command("%s -o %s %s" % (assembler, elffd.name, infd.name))
-        infd.close()
-
-        if not os.path.exists(elffd.name):
-            # reopen it so tempfile will not complain
-            open(elffd.name, 'w').write('B00B')
-            return None
-
-        outfd = tmpfile(is_binary_file=True)
-        objcopy = '%s -j .text -Obinary %s %s' % (self.OBJCOPY, elffd.name, outfd.name)
-        execute_external_command(objcopy)
-        elffd.close()
-        if not os.path.exists(outfd.name):
-            # reopen it so tempfile will not complain
-            open(outfd.name, 'w').write('B00B')
-            return None
-        bincode = outfd.read()
-        outfd.close()
-        return bincode
-
-    def disassemble(self, buf, arch='arm'):
-        """
-        Disassemble binary to ASM instructions using OBJCOPY OBJDUMP
-            - buf: input binary (raw bytes)
-            - arch: arm / aarch64 / thumb / thumb64 assembly
-
-        Returns:
-            - ASM code (String)
-        """
-        if self.PREFIX == '':
-            warning('Cross compile toolchain not found! ')
-            return
-        # todo aarch64 and thumb64
-        if not buf:
-            return None
-
-        rawfd = tmpfile(is_binary_file=True)
-        elffd = tmpfile(is_binary_file=True)
-
-        objdump = [self.OBJDUMP, '-d', '--adjust-vma', '0', '-b', 'elf32-littlearm']
-        objcopy = [self.OBJCOPY,
-                   '-I', 'binary',
-                   '-O', 'elf32-littlearm',
-                   '-B', 'arm',
-                   '--set-section-flags', '.data=code',
-                   '--rename-section', '.data=.text',
-                   ]
-
-        if 'thumb' in arch:
-            objcopy += ['--prefix-symbol=\\$t.']
-        else:
-            objcopy += ['-w', '-N', '\\*']
-
-        rawfd.write(buf)
-        rawfd.flush()
-
-        execute_external_command(' '.join(objcopy + [rawfd.name, elffd.name]))
-        out = execute_external_command(' '.join(objdump + [elffd.name]))
-        out = out.split('<.text>:\n')
-
-        if len(out) != 2:
-            return None
-
-        result = out[1].strip('\n').rstrip().expandtabs()
-        return result
-
-    def format_shellcode(self, buf, arch='arm'):
-        """
-        Format raw shellcode to disasm output display
-            "\x6a\x01"  # 0x00000000:    push byte +0x1
-            "\x5b"      # 0x00000002:    pop ebx
-
-        TODO: understand syscall numbers, socket call
-        """
-        if self.PREFIX == '':
-            warning('Cross compile toolchain not found! ')
-            return
-        asmcode = self.disassemble(buf, arch)
-
-        if not asmcode:
-            return ""
-
-        shellcode = []
-        # '   0:   e49df004        pop     {pc}            ; (ldr pc, [sp], #4)'
-        pattern = re.compile(r"\s*([0-9a-f]+):\s*([0-9a-f]+)(.+)")
-
-        # matches = pattern.findall(asmcode)
-        for line in asmcode.splitlines():
-            m = pattern.match(line)
-            if m:
-                (addr, bytes, code) = m.groups()
-                sc = '"0x%s"' % bytes
-                shellcode += [(sc, "0x" + addr, code.strip())]
-
-
 # Define syscall dict {number:[function_name,name,params_num,[params...]]}
 SYSTEM_CALLS = None
 
@@ -233,8 +75,8 @@ CPSR_M_MODES = {
 }
 
 
-# CPSR = ["T", "F", "I", "V", "C", "Z", "N"]
-# CPSR_TEXT = ["thumb", "no-fiq", "no-irq", "overflow", "carry", "zero", "negative"]
+# CPSR = ['T', 'F', 'I', 'V', 'C', 'Z', 'N']
+# CPSR_TEXT = ['thumb', 'no-fiq', 'no-irq', 'overflow', 'carry', 'zero', 'negative']
 #
 # CPSR_INDEX = [CPSR_T, CPSR_F, CPSR_I, CPSR_V, CPSR_C, CPSR_Z, CPSR_N]
 # CPSR_M = 0b11111
@@ -247,13 +89,16 @@ class ArmPEDACmd(PEDACmd):
     def _get_function_args_32(self, code, argc=None):
         """
         Guess the number of arguments passed to a function - arm
+
+        Args:
+            code: the whole disasm code to search
+            argc: args number want to check
         """
-        reg_order = ["r0", "r1", "r2", "r3"]
+        reg_order = ['r0', 'r1', 'r2', 'r3']
 
         if argc is None:
             # deal with regs
-            p = re.compile(r":\s*(\S+)\s*(\w+),")
-            matches = p.findall(code)
+            matches = RE.ARM_DISASM_WITH_REGS.findall(code)
             m = [r for (_, r) in matches]
 
             args = []
@@ -266,31 +111,26 @@ class ArmPEDACmd(PEDACmd):
 
             if len(args) < 4:
                 return args
-
             else:
+                # search from disasm
                 argc = 0
                 #  '0x8d08: str     r3, [sp, #20]'
-                p = re.compile(r":\s*str\s*\S+,\s*\[sp.*#(.*)\]")
-                matches = p.findall(code)
+                matches = RE.ARM_DISASM_WITH_STR.findall(code)
                 if matches:
                     l = len(matches)
                     for v in matches:
-                        # if v.startswith("+"):
                         offset = to_int(v)
                         if offset is not None and (offset // 4) > l:
                             continue
                         argc += 1
                 else:  # try with push style todo
-                    argc = code.count("push")
+                    argc = code.count('push')
 
                 argc = min(argc, 6)
                 if argc == 0:
                     return args
 
-                sp = self.peda.getreg("sp")
-                mem = self.peda.dumpmem(sp, sp + 4 * argc)
-                for i in range(argc):
-                    args += [struct.unpack("<L", mem[i * 4:(i + 1) * 4])[0]]
+                args.extend(self.peda.dumpstack(argc))
 
                 return args
 
@@ -311,12 +151,7 @@ class ArmPEDACmd(PEDACmd):
             if argc == 0:
                 return args
 
-            # deal with mem
-            sp = self.peda.getreg("sp")
-            mem = self.peda.dumpmem(sp, sp + 4 * argc)
-            for i in range(argc):
-                args += [struct.unpack("<L", mem[i * 4:(i + 1) * 4])[0]]
-
+            args.extend(self.peda.dumpstack(argc))
             return args
 
     def _get_function_args_64(self, code, argc=None):
@@ -325,27 +160,23 @@ class ArmPEDACmd(PEDACmd):
         """
         reg_order = ('x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7')
 
-        if to_int(argc) is None:
-            return None
+        argc = to_int(argc)
+        if argc is None:
+            argc = 4
+        args = []
+
+        # deal with regs
+        regs = self.peda.getregs()
+        for reg in reg_order:
+            if argc == 0:
+                break
+            args.append(regs[reg])
+            argc -= 1
         else:
-            argc = to_int(argc)
-            args = []
+            # deal with mem
+            args.extend(self.peda.dumpstack(argc))
 
-            # deal with regs
-            regs = self.peda.getregs()
-            for reg in reg_order:
-                if argc == 0:
-                    break
-                args.append(regs[reg])
-                argc -= 1
-            else:
-                # deal with mem
-                sp = self.peda.getreg("sp")
-                mem = self.peda.dumpmem(sp, sp + 8 * argc)
-                for i in range(argc):
-                    args.append(struct.unpack("<L", mem[i * 4:(i + 1) * 4])[0])
-
-            return args
+        return args
 
     def _get_function_args(self, argc=None):
         """
@@ -365,7 +196,7 @@ class ArmPEDACmd(PEDACmd):
 
         bits = self.peda.getbits()
 
-        code = ""
+        code = []
         if argc is None:
             pc = self.peda.getpc()
             prev_insts = self.peda.prev_inst(pc, 12)
@@ -374,7 +205,9 @@ class ArmPEDACmd(PEDACmd):
             for (addr, inst) in prev_insts[::-1]:
                 if inst.strip().startswith('b'):
                     break
-                code = "0x%x:%s\n" % (addr, inst) + code
+                code.append('0x%x:%s' % (addr, inst))
+            code.reverse()
+        code = os.linesep.join(code)
 
         if bits == 32:
             args = self._get_function_args_32(code, argc)
@@ -384,12 +217,13 @@ class ArmPEDACmd(PEDACmd):
         return args
 
     # get_function_args()
+    @msg.bufferize
     def dumpargs(self, *arg):
         """
         Display arguments passed to a function when stopped at a call instruction
         Usage:
             MYNAME [count]
-                count: force to display "count args" instead of guessing
+                count: force to display 'count args' instead of guessing
         """
 
         (count,) = normalize_argv(arg, 1)
@@ -398,19 +232,19 @@ class ArmPEDACmd(PEDACmd):
 
         args = self._get_function_args(count)
         if args:
-            msg("Guessed arguments:")
+            msg('Guessed arguments:')
             for (i, a) in enumerate(args):
                 chain = peda.examine_mem_reference(a)
-                msg("arg[%d]: %s" % (i, format_reference_chain(chain)))
+                msg('arg[%d]: %s' % (i, format_reference_chain(chain)))
         else:
-            msg("No argument")
+            msg('No argument')
 
         return
 
     # return [function_name,name,params_num,[params...],[params_value...]]
     def _get_syscall_args(self, num=None):
         if self.peda.getbits() != 32:
-            # todo
+            msg('only support 32 bits')
             return None
         regs = self.peda.getregs()
         if regs is None:
@@ -432,10 +266,7 @@ class ArmPEDACmd(PEDACmd):
 
         if params_num != 0:
             # deal with mem
-            sp = self.peda.getreg("sp")
-            mem = self.peda.dumpmem(sp, sp + 4 * params_num)
-            for i in range(params_num):
-                args += [struct.unpack("<L", mem[i * 4:(i + 1) * 4])[0]]
+            args.extend(self.peda.dumpstack(params_num))
 
         return function_name, name, len(params), params, args
 
@@ -444,7 +275,7 @@ class ArmPEDACmd(PEDACmd):
         Display information at a system call instruction
         Usage:
             MYNAME [num]
-                nun: force to display "system call num" instead of figure out register r7
+                nun: force to display 'system call num' instead of figure out register r7
         """
         if SYSTEM_CALLS is None:
             return
@@ -460,17 +291,17 @@ class ArmPEDACmd(PEDACmd):
                     '        %s' % function_name,
                     blue('Description:', 'bold'),
                     '        %s' % name,
-                    blue("Arguments:", 'bold')]
+                    blue('Arguments:', 'bold')]
             if params_num == 0:
                 text.append('        Argument None')
             else:
                 for i in range(params_num):
                     chain = peda.examine_mem_reference(args[i])
-                    text.append("        arg[%d]:(%s) %s" % (i, params[i], format_reference_chain(chain)))
+                    text.append('        arg[%d]:(%s) %s' % (i, params[i], format_reference_chain(chain)))
             text = '\n'.join(text)
             msg(text)
         else:
-            msg("    System call not found!")
+            msg('    System call not found!')
 
         return
 
@@ -479,7 +310,7 @@ class ArmPEDACmd(PEDACmd):
         Display details at a system call instruction
         Usage:
             MYNAME num | syscall_name
-                num: force to display "system call num" instead of figure out register r7
+                num: force to display 'system call num' instead of figure out register r7
         """
         if SYSTEM_CALLS is None:
             return
@@ -492,7 +323,7 @@ class ArmPEDACmd(PEDACmd):
             func_name = num
         peda.execute('shell man 2 %s' % func_name)
 
-    # wrapper for stepuntil("j")
+    # wrapper for stepuntil('j')
     def nextjmp(self, *arg):
         """
         Step until next 'j*' instruction in specific memory range
@@ -501,9 +332,9 @@ class ArmPEDACmd(PEDACmd):
         """
         (keyword, mapname) = normalize_argv(arg, 2)
         if keyword:
-            self.stepuntil("b.*%s" % keyword, mapname)
+            self.stepuntil('b.*%s' % keyword, mapname)
         else:
-            self.stepuntil("b", mapname)
+            self.stepuntil('b', mapname)
 
     def _testjump(self, inst=None):
         """
@@ -519,18 +350,19 @@ class ArmPEDACmd(PEDACmd):
 
         if not inst:
             pc = self.peda.getpc()
-            inst = self.peda.execute_redirect("x/i 0x%x" % pc)
+            inst = self.peda.execute_redirect('x/i 0x%x' % pc)
             if not inst:
                 return None
 
         # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
-        match = re.match(r'.*:\s+(b[l|x]{0,2})\.?(\S{0}|\S{2})(\.w|\.n)?\s+', inst)
-        next_addr = self.peda.eval_target(inst)
-        if next_addr is None:
-            next_addr = 0
+        match = RE.ARM_DISASM_WITH_JMP.match(inst)
 
         if not match:
             return None
+
+        next_addr = self.peda.eval_target(inst)
+        if next_addr is None:
+            next_addr = 0
 
         cond = match.group(2)
         if (
@@ -538,9 +370,9 @@ class ArmPEDACmd(PEDACmd):
         ) or (
                 cond == 'al'
         ) or (
-                cond == "eq" and flags["Z"]
+                cond == 'eq' and flags['Z']
         ) or (
-                cond == "ne" and not flags["Z"]
+                cond == 'ne' and not flags['Z']
         ) or (
                 (cond == 'cs' or cond == 'hs') and flags['C']
         ) or (
@@ -584,12 +416,12 @@ class ArmPEDACmd(PEDACmd):
 
         if not inst:
             pc = self.peda.getpc()
-            inst = self.peda.execute_redirect("x/i 0x%x" % pc)
+            inst = self.peda.execute_redirect('x/i 0x%x' % pc)
             if not inst:
                 return None
 
         # inst='=> 0xaf130bd4:\tcbz\tr0, 0xaf130be4'
-        match = re.match(r'.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)', inst)
+        match = RE.ARM_DISASM_WITH_CB.match(inst)
         if not match:
             return None
         cond, r, next_addr = match.groups()
@@ -633,90 +465,86 @@ class ArmPEDACmd(PEDACmd):
         else:
             inst = None
 
-        text = blue("[%s]" % "CODE".center(self.width, "-"))
+        text = blue('[%s]' % 'CODE'.center(self.width, '-'))
         msg(text)
-        if inst:  # valid $PC
-            text = ""
-            opcode = inst.split(":\t")[-1].split()[0]
-            if opcode.startswith('b'):
-                jumpto = self._testjump(inst)
-                if jumpto:  # JUMP is taken
-                    code = peda.disassemble_around(pc, count)
-                    code = code.splitlines()
-                    pc_idx = 999
-                    for (idx, line) in enumerate(code):
-                        if ("0x%x" % pc) in line.split(":")[0]:
-                            pc_idx = idx
-                        if idx <= pc_idx:
-                            text += line + "\n"
-                        else:
-                            text += " | %s\n" % line.strip()
-                    text = format_disasm_code_arm(text, pc) + "\n"
-                    text += " |->"
-                    if 'x' in opcode:
-                        current_mode = peda.execute_redirect('show arm force-mode')
-                        match = re.search(r'"(\S*)"', current_mode)
-                        if match:
-                            current_mode = match.group(1)
-                        else:
-                            current_mode = 'auto'
-                        peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'))
-                        code = peda.get_disasm(jumpto, count // 2)
-                        peda.execute_redirect('set arm force-mode %s' % current_mode)
-                    else:
-                        code = peda.get_disasm(jumpto, count // 2)
-                    if not code:
-                        code = "   Cannot evaluate jump destination\n"
-                    code = code.splitlines()
-                    text += red(code[0]) + "\n"
-                    for line in code[1:]:
-                        text += "       %s\n" % line.strip()
-                    text += red("JUMP is taken".rjust(self.width))
-                    msg(text.rstrip())
-                    self.dumpargs()
-                else:  # JUMP is NOT taken
-                    text += format_disasm_code_arm(peda.disassemble_around(pc, count), pc)
-                    text += "\n" + green("JUMP is NOT taken".rjust(self.width))
-                    msg(text.rstrip())
-            elif opcode.startswith('cb'):
-                jumpto = self._testjump_cb(inst)
-                if jumpto:  # JUMP is taken
-                    code = peda.disassemble_around(pc, count)
-                    code = code.splitlines()
-                    pc_idx = 999
-                    for (idx, line) in enumerate(code):
-                        if ("0x%x" % pc) in line.split(":")[0]:
-                            pc_idx = idx
-                        if idx <= pc_idx:
-                            text += line + "\n"
-                        else:
-                            text += " | %s\n" % line.strip()
-                    text = format_disasm_code_arm(text, pc) + "\n"
-                    text += " |->"
-                    code = peda.get_disasm(jumpto, count // 2)
-                    if not code:
-                        code = "   Cannot evaluate jump destination\n"
-                    code = code.splitlines()
-                    text += red(code[0]) + "\n"
-                    for line in code[1:]:
-                        text += "       %s\n" % line.strip()
-                    text += red("JUMP is taken".rjust(self.width))
-                    msg(text.rstrip())
-                else:  # JUMP is NOT taken
-                    text += format_disasm_code_arm(peda.disassemble_around(pc, count), pc)
-                    text += "\n" + green("JUMP is NOT taken".rjust(self.width))
-                    msg(text.rstrip())
-            # stopped at other instructions
-            else:
-                text += peda.disassemble_around(pc, count)
-                msg(format_disasm_code_arm(text, pc))
-                if 'svc' in opcode:
-                    msg('')
-                    self.syscall()
-        else:  # invalid $PC
-            msg("Invalid $PC address: 0x%x" % pc, "red")
+        if not inst:  # valid $PC
+            msg('Invalid $PC address: 0x%x' % pc, 'red')
+            return
 
-        return
+        opcode = inst.split(':\t')[-1].split()[0]
+        if opcode.startswith('b'):  # check if is b?? opcode
+            jumpto = self._testjump(inst)
+            if jumpto:  # JUMP is taken
+                code = peda.disassemble_around(pc, count)
+                pc_idx = 999
+                text = []
+                for (idx, line) in enumerate(code.splitlines()):
+                    if ('0x%x' % pc) in line.split(':')[0]:
+                        pc_idx = idx
+                    if idx <= pc_idx:
+                        text.append(line)
+                    else:
+                        text.append(' | ' + line.strip())
+                text = [format_disasm_code_arm(os.linesep.join(text), pc)]
+                if 'x' in opcode:
+                    current_mode = peda.execute_redirect('show arm force-mode')
+                    match = re.search(r'"(\S *)"', current_mode)
+                    if match:
+                        current_mode = match.group(1)
+                    else:
+                        current_mode = 'auto'
+                    peda.execute_redirect('set arm force-mode %s' % ('thumb' if jumpto & 0x1 else 'arm'))
+                    code = peda.get_disasm(jumpto, count // 2)
+                    peda.execute_redirect('set arm force-mode %s' % current_mode)
+                else:
+                    code = peda.get_disasm(jumpto, count // 2)
+                if not code:
+                    code = '   Cannot evaluate jump destination\n'
+                code = code.splitlines()
+                text.append(' |->' + red(code[0]))
+                for line in code[1:]:
+                    text.append('       ' + line.strip())
+                text.append(red('JUMP is taken'.rjust(self.width)))
+                msg(os.linesep.join(text))
+                self.dumpargs()
+            else:  # JUMP is NOT taken
+                text = format_disasm_code_arm(peda.disassemble_around(pc, count), pc) + os.linesep + green(
+                    'JUMP is NOT taken'.rjust(self.width))
+                msg(text.rstrip())
+        elif opcode.startswith('cb'):
+            jumpto = self._testjump_cb(inst)
+            if jumpto:  # JUMP is taken
+                code = peda.disassemble_around(pc, count)
+                pc_idx = 999
+                text = []
+                for (idx, line) in enumerate(code.splitlines()):
+                    if ('0x%x' % pc) in line.split(':')[0]:
+                        pc_idx = idx
+                    if idx <= pc_idx:
+                        text.append(line)
+                    else:
+                        text.append(' | ' + line.strip())
+                text = [format_disasm_code_arm(os.linesep.join(text), pc)]
+                code = peda.get_disasm(jumpto, count // 2)
+                if not code:
+                    code = '   Cannot evaluate jump destination\n'
+                code = code.splitlines()
+                text.append(' |->' + red(code[0]))
+                for line in code[1:]:
+                    text.append('       ' + line.strip())
+                text.append(red('JUMP is taken'.rjust(self.width)))
+                msg(os.linesep.join(text))
+            else:  # JUMP is NOT taken
+                text = format_disasm_code_arm(peda.disassemble_around(pc, count), pc) + os.linesep + green(
+                    'JUMP is NOT taken'.rjust(self.width))
+                msg(text)
+        # stopped at other instructions
+        else:
+            text = peda.disassemble_around(pc, count)
+            msg(format_disasm_code_arm(text, pc))
+            if 'svc' in opcode:
+                msg('')
+                self.syscall()
 
     def _get_cpsr(self):
         """
@@ -727,7 +555,7 @@ class ArmPEDACmd(PEDACmd):
         """
 
         # need indeed
-        cpsr = self.peda.getreg("cpsr")
+        cpsr = self.peda.getreg('cpsr')
         # if not cpsr:
         #    return None
 
@@ -740,7 +568,7 @@ class ArmPEDACmd(PEDACmd):
         return flags
 
     def _get_mode(self):
-        cpsr = self.peda.getreg("cpsr")
+        cpsr = self.peda.getreg('cpsr')
         if not cpsr:
             return None
         bits = self.peda.getbits()
@@ -777,9 +605,9 @@ class ArmPEDACmd(PEDACmd):
             return False
 
         if value is None or cpsr[CPSR[index]] != value:  # switch value
-            reg_cpsr = self.peda.getreg("cpsr")
+            reg_cpsr = self.peda.getreg('cpsr')
             reg_cpsr ^= CPSR_MASK[index]
-            result = self.peda.execute("set $cpsr = 0x%x" % reg_cpsr)
+            result = self.peda.execute('set $cpsr = 0x%x' % reg_cpsr)
             return result
 
         return True
@@ -809,25 +637,25 @@ class ArmPEDACmd(PEDACmd):
             flags = self._get_cpsr()
             for (i, f) in enumerate(CPSR):
                 if flags[f]:
-                    text.append(red(CPSR_TEXT[i].upper(), "bold"))
+                    text.append(red(CPSR_TEXT[i].upper(), 'bold'))
                 else:
                     text.append(green(CPSR_TEXT[i].lower()))
-            text.append(blue("[%s-MODE]" % self._get_mode()))
+            text.append(blue('[%s-MODE]' % self._get_mode()))
             text = ' '.join(text)
 
-            cpsr = peda.getreg("cpsr")
-            msg("%s: 0x%x (%s)" % (green("CPSR"), cpsr, text))
+            cpsr = peda.getreg('cpsr')
+            msg('%s: 0x%x (%s)' % (green('CPSR'), cpsr, text))
 
-        elif option == "set":
+        elif option == 'set':
             self._set_cpsr(flagname.lower(), True)
 
-        elif option == "clear":
+        elif option == 'clear':
             self._set_cpsr(flagname, False)
 
         elif option == 'toggle':
             self._set_cpsr(flagname, None)
 
-    cpsr.options = ["set", "clear"]
+    cpsr.options = ['set', 'clear']
 
     def xinfo(self, *arg):
         """
@@ -842,114 +670,11 @@ class ArmPEDACmd(PEDACmd):
             self._missing_argument()
 
         super(ArmPEDACmd, self).xinfo(*arg)
-        if str(address).startswith("r"):
-            if regname is None or "cpsr" in regname:
+        if str(address).startswith('r'):
+            if regname is None or 'cpsr' in regname:
                 self.cpsr()
 
-    xinfo.options = ["register"]
-
-    ###############################
-    #   Exploit Helper Commands   #
-    ###############################
-    @memoized
-    def _assemble(self, asmcode, arch=None):
-        """
-        Assemble ASM instructions using NASM
-            - asmcode: input ASM instructions, multiple instructions are separated by ";" (String)
-
-        Returns:
-            - bin code (raw bytes)
-        """
-        if arch is None:
-            bits = self.peda.getbits()
-            arch = 'arm' if bits == 32 else 'aarch64'
-        return asm.assemble(asmcode, arch)
-
-    def assemble(self, *arg):
-        """
-        On the fly assemble and execute instructions using AS. Auto exec when changing instruction at pc.
-        Usage:
-            MYNAME [mode] [address]
-                mode: arm / aarch64 / thumb / thumb64
-        """
-        (mode, address) = normalize_argv(arg, 2)
-
-        exec_mode = write_mode = False
-        if to_int(mode) is not None:
-            address, mode = mode, None
-
-        if mode is None:
-            bits = self.peda.getbits()
-            cpsr = self._get_cpsr()
-            if not cpsr:
-                error('Not attached. Need to specify a MODE!')
-                mode = 'error'
-            elif cpsr['T']:
-                mode = 'thumb' if bits == 32 else 'thumb64'
-            else:
-                mode = 'arm' if bits == 32 else 'aarch64'
-        if mode not in ('arm', 'aarch64', 'thumb', 'thumb64'):
-            self._missing_argument()
-
-        if self._is_running() and address == peda.getpc():
-            write_mode = exec_mode = True
-
-        if address is None:
-            write_mode = exec_mode = False
-        elif peda.is_address(address):
-            write_mode = True
-
-        if write_mode:
-            msg('Instruction will be written to 0x%x. '
-                'Command "set write on" can be used to patch the binary file.' % address)
-        else:
-            msg("Instructions will be written to stdout")
-
-        msg('Type instructions (%s syntax), one or more per line separated by ";".' % red(mode.upper()))
-        msg('End with a line saying just "end".')
-
-        if not write_mode:
-            address = 0xdeadbeef
-
-        inst_list = []
-        inst_code = b""
-        # fetch instruction loop
-        while True:
-            try:
-                inst = input("%s|0x%x> " % (mode, address))
-            except EOFError:
-                msg('')
-                break
-            if inst == "end":
-                break
-            if inst == "":
-                continue
-            bincode = self._assemble(inst, mode)
-            if bincode is None:
-                continue
-            size = len(bincode)
-            if size == 0:
-                continue
-            inst_list.append((size, bincode, inst))
-            if write_mode:
-                peda.writemem(address, bincode)
-            # execute assembled code
-            if exec_mode:
-                peda.execute("stepi %d" % (inst.count(";") + 1))
-
-            address += size
-            inst_code += bincode
-            msg('hexify: "%s"' % to_hexstr(bincode))
-
-        text = asm.format_shellcode(b"".join([x[1] for x in inst_list]), mode)
-        if text:
-            msg("Assembled%s instructions:" % ("/Executed" if exec_mode else ""))
-            msg(text)
-            msg('hexify: "%s"' % to_hexstr(inst_code))
-
-        return
-
-    assemble.options = ['arm', 'thumb']
+    xinfo.options = ['register']
 
 
 ###########################################################################
@@ -958,42 +683,40 @@ class ArmPEDACmd(PEDACmd):
 asm = peda = pedacmd = None
 
 if __name__ == '__main__':
-    info('Checking cross compile toolchains')
-    asm = Asm()
     info('Init PEDA main section.')
     peda = PEDA()
     pedacmd = ArmPEDACmd(peda, PEDAFILE)
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
-    # register "peda" command in gdb
+    # register 'peda' command in gdb
     info('Registering commands.')
     pedaGDBCommand(peda, pedacmd)
-    Alias("pead", "peda")  # just for auto correction
+    Alias('pead', 'peda')  # just for auto correction
 
     # create aliases for subcommands
     for cmd in pedacmd.commands:
         func = getattr(pedacmd, cmd)
-        func.__func__.__doc__ = func.__doc__.replace("MYNAME", cmd)
-        if cmd not in ["help", "show", "set"]:
+        func.__func__.__doc__ = func.__doc__.replace('MYNAME', cmd)
+        if cmd not in ['help', 'show', 'set']:
             pedacmd._alias(cmd, cmd, False)
 
     # custom hooks
-    peda.define_user_command("hook-stop", "peda context")
+    peda.define_user_command('hook-stop', 'peda context')
 
     # custom command aliases, add any alias you want
-    pedacmd._alias("phelp", "help")
-    pedacmd._alias("pset", "set")
-    pedacmd._alias("pshow", "show")
-    pedacmd._alias("find", "searchmem")  # override gdb find command
-    pedacmd._alias("stack", "telescope $sp")
-    pedacmd._alias("viewmem", "telescope")
-    pedacmd._alias("reg", "xinfo register")
+    pedacmd._alias('phelp', 'help')
+    pedacmd._alias('pset', 'set')
+    pedacmd._alias('pshow', 'show')
+    pedacmd._alias('find', 'searchmem')  # override gdb find command
+    pedacmd._alias('stack', 'telescope $sp')
+    pedacmd._alias('viewmem', 'telescope')
+    pedacmd._alias('reg', 'xinfo register')
 
-    Alias("arm", "set arm force-mode arm")
-    Alias("thumb", "set arm force-mode thumb")
-    Alias("auto", "set arm force-mode auto")
+    Alias('arm', 'set arm force-mode arm')
+    Alias('thumb', 'set arm force-mode thumb')
+    Alias('auto', 'set arm force-mode auto')
 
-    PEDA.execute("set prompt \001%s\002" % red("\002peda-arm > \001"))  # custom prompt
+    PEDA.execute('set prompt \001%s\002' % red('\002peda-arm > \001'))  # custom prompt
 
     # Check syscalls
     if zlib:
@@ -1003,6 +726,9 @@ if __name__ == '__main__':
             SYSTEM_CALLS = pickle_loads(zlib.decompress(f.read()))
     else:
         warning('zlib module not supported. Syscall lookup is disabled.')
+
+    info('Checking plugins.')
+    pedacmd.plugin()
 
     # Check logos
     msg('')

@@ -14,9 +14,9 @@ __all__ = ['OPTIONS', 'Option']
 
 # PEDA global options
 OPTIONS = {
-    "badchars": ("", "bad characters to be filtered in payload/output, e.g: '\\x0a\\x00'"),
+    "badchars": ('', "bad characters to be filtered in payload/output, e.g: '\\x0a\\x00'"),
     "pattern": (1, "pattern type, 0 = basic, 1 = extended, 2 = maximum"),
-    "p_charset": ("", "custom charset for pattern_create"),
+    "p_charset": ('', "custom charset for pattern_create"),
     "indent": (4, "number of ident spaces for output python payload, e.g: 0|4|8"),
     "ansicolor": ("on", "enable/disable colorized output, e.g: on|off"),
     "pagesize": (25, "number of lines to display per page, 0 = disable paging"),
@@ -30,7 +30,7 @@ OPTIONS = {
     "context": ("register,source,code,stack", "context display setting, e.g: register, code, stack, all"),
     "verbose": ("off", "show detail execution of commands, e.g: on|off"),
     "debug": ("off", "show detail error of peda commands, e.g: on|off"),
-    "_teefd": ("", "internal use only for tracelog/crashlog writing")
+    "_teefd": ('', "internal use only for tracelog/crashlog writing")
 }
 
 
@@ -54,7 +54,7 @@ class Option(object):
         return True
 
     @staticmethod
-    def show(name=""):
+    def show(name=''):
         """display options"""
         result = {}
         for opt in Option.options:
@@ -80,7 +80,7 @@ class Option(object):
             return False
 
     @staticmethod
-    def help(name=""):
+    def help(name=''):
         """display help info of options"""
         result = {}
         for opt in Option.options:

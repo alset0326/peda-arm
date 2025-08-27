@@ -19,18 +19,17 @@ import re
 import stat
 import string
 import struct
+import subprocess
 import sys
 import tempfile
-from subprocess import *
 
-from peda.six.moves import cPickle as pickle
-from peda.six.moves import input
-from peda.six.moves import range
-from peda.six.moves import reload_module as reload
-
-from peda import config
-from peda import six
-from peda.six import StringIO
+from . import config
+from . import six
+from .six import StringIO
+from .six.moves import cPickle as pickle
+from .six.moves import input
+from .six.moves import range
+from .six.moves import reload_module as reload
 
 # we use a cache to save all memoized object
 _CACHES = []
@@ -80,7 +79,7 @@ class memoized(object):
         self.instance = obj
         return self
 
-    def _reset(self):
+    def reset(self):
         """Reset the cache"""
         # Make list to prevent modifying dictionary while iterating
         self.cache.clear()
@@ -88,14 +87,23 @@ class memoized(object):
 
 def reset_cache():
     for m in _CACHES:
-        m._reset()
+        m.reset()
 
 
-def tmpfile(pref="peda-", is_binary_file=False):
+def tmpfile(pref='peda-', is_binary_file=False):
     """Create and return a temporary file with custom prefix"""
 
     mode = 'w+b' if is_binary_file else 'w+'
     return tempfile.NamedTemporaryFile(mode=mode, prefix=pref)
+
+
+# ansicolor definitions
+COLORS = {'black': '30', 'red': '31', 'green': '32', 'yellow': '33',
+          'blue': '34', 'purple': '35', 'cyan': '36', 'white': '37'}
+CATTRS = {'regular': '0', 'bold': '1', 'underline': '4', 'strike': '9',
+          'light': '1', 'dark': '2', 'invert': '7'}
+CPRE = '\033['
+CSUF = '\033[0m'
 
 
 def colorize(text, color=None, attrib=None):
@@ -103,47 +111,41 @@ def colorize(text, color=None, attrib=None):
     Colorize text using ansicolor
     ref: https://github.com/hellman/libcolors/blob/master/libcolors.py
     """
-    # ansicolor definitions
-    COLORS = {"black": "30", "red": "31", "green": "32", "yellow": "33",
-              "blue": "34", "purple": "35", "cyan": "36", "white": "37"}
-    CATTRS = {"regular": "0", "bold": "1", "underline": "4", "strike": "9",
-              "light": "1", "dark": "2", "invert": "7"}
 
-    CPRE = '\033['
-    CSUF = '\033[0m'
-
-    if config.Option.get("ansicolor") != "on":
+    if config.Option.get('ansicolor') != 'on':
         return text
 
-    ccode = ""
+    ccode = []
     if attrib:
         for attr in attrib.lower().split():
-            attr = attr.strip(",+|")
+            attr = attr.strip(',+|')
             if attr in CATTRS:
-                ccode += ";" + CATTRS[attr]
+                ccode.append(';')
+                ccode.append(CATTRS[attr])
     if color in COLORS:
-        ccode += ";" + COLORS[color]
-    return CPRE + ccode + "m" + text + CSUF
+        ccode.append(';')
+        ccode.append(COLORS[color])
+    return ''.join([CPRE, ''.join(ccode), 'm', text, CSUF])
 
 
 def green(text, attrib=None):
     """Wrapper for colorize(text, 'green')"""
-    return colorize(text, "green", attrib)
+    return colorize(text, 'green', attrib)
 
 
 def red(text, attrib=None):
     """Wrapper for colorize(text, 'red')"""
-    return colorize(text, "red", attrib)
+    return colorize(text, 'red', attrib)
 
 
 def yellow(text, attrib=None):
     """Wrapper for colorize(text, 'yellow')"""
-    return colorize(text, "yellow", attrib)
+    return colorize(text, 'yellow', attrib)
 
 
 def blue(text, attrib=None):
     """Wrapper for colorize(text, 'blue')"""
-    return colorize(text, "blue", attrib)
+    return colorize(text, 'blue', attrib)
 
 
 class message(object):
@@ -169,28 +171,29 @@ class message(object):
             return wrapper
 
         # If we are still using stdio we need to change it.
-        if not self.buffering:
+        if self.buffering == 0:
             self.out = StringIO()
         self.buffering += 1
+        return None
 
     def flush(self):
-        if not self.buffering:
+        if self.buffering == 0:
             # Tried to flush a message that is not bufferising.
             self.out.flush()
             return
         self.buffering -= 1
 
         # We only need to flush if this is the lowest recursion level.
-        if not self.buffering:
+        if self.buffering == 0:
             self.out.flush()
             sys.stdout.write(self.out.getvalue())
             self.out = sys.stdout
 
     def __call__(self, text, color=None, attrib=None, teefd=None):
         if not teefd:
-            teefd = config.Option.get("_teefd")
+            teefd = config.Option.get('_teefd')
 
-        if isinstance(text, six.string_types) and "\x00" not in text:
+        if isinstance(text, six.string_types) and '\x00' not in text:
             print(colorize(text, color, attrib), file=self.out)
             if teefd:
                 print(colorize(text, color, attrib), file=teefd)
@@ -203,36 +206,24 @@ class message(object):
 msg = message()
 
 
-def warning_msg(text):
+def warning(text):
     """Colorize warning message with prefix"""
-    msg("[!] Warning: " + str(text), "yellow")
+    msg('[!] Warning: ' + str(text), 'yellow')
 
 
-warning = warning_msg
-
-
-def error_msg(text):
+def error(text):
     """Colorize error message with prefix"""
-    msg("[!] Error: " + str(text), "red")
+    msg('[!] Error: ' + str(text), 'red')
 
 
-error = error_msg
-
-
-def debug_msg(text, prefix="Debug"):
+def debug(text, prefix='Debug'):
     """Colorize debug message with prefix"""
-    msg("%s: %s" % (prefix, str(text)), "cyan")
+    msg('%s: %s' % (prefix, str(text)), 'cyan')
 
 
-debug = debug_msg
-
-
-def info_msg(text):
+def info(text):
     """Colorize info message with prefix"""
     msg(green('[*] ') + str(text))
-
-
-info = info_msg
 
 
 def trim(docstring):
@@ -262,7 +253,7 @@ def trim(docstring):
     while trimmed and not trimmed[0]:
         trimmed.pop(0)
     # Return a single string:
-    return '\n'.join(trimmed)
+    return os.linesep.join(trimmed)
 
 
 def pager(text, pagesize=None):
@@ -270,7 +261,7 @@ def pager(text, pagesize=None):
     Paging output, mimic external command less/more
     """
     if not pagesize:
-        pagesize = config.Option.get("pagesize")
+        pagesize = config.Option.get('pagesize')
 
     if pagesize <= 0:
         msg(text)
@@ -283,8 +274,8 @@ def pager(text, pagesize=None):
     for line in text:
         msg(line)
         if i % pagesize == 0:
-            ans = input("--More--(%d/%d)" % (i, l))
-            if ans.lower().strip() == "q":
+            ans = input('--More--(%d/%d)' % (i, l))
+            if ans.lower().strip() == 'q':
                 break
         i += 1
 
@@ -301,32 +292,31 @@ def execute_external_command(command, cmd_input=None):
     Returns:
         - output of command (String)
     """
-    result = ""
-    P = Popen(command, stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=True)
+    P = subprocess.Popen(command, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     (result, err) = P.communicate(cmd_input)
-    if err and config.Option.get("debug") == "on":
-        warning_msg(err)
+    if err and config.Option.get('debug') == 'on':
+        warning(err)
 
     return decode_string_escape(result)
 
 
-def is_printable(text, printables=""):
+def is_printable(text, printables=''):
     """
     Check if a string is printable
     """
     if six.PY3 and isinstance(text, six.string_types):
         text = six.b(text)
-    return set(text) - set(six.b(string.printable) + six.b(printables)) == set()
+    return len(set(text) - set(six.b(string.printable) + six.b(printables))) == 0
 
 
 def is_math_exp(str):
     """
     Check if a string is a math exprssion
     """
-    charset = set("0123456789abcdefx+-*/%^")
-    opers = set("+-*/%^")
+    charset = set('0123456789abcdefx+-*/%^')
+    opers = set('+-*/%^')
     exp = set(str.lower())
-    return (exp & opers != set()) and (exp - charset == set())
+    return len(exp & opers) > 0 and len(exp - charset) == 0
 
 
 def normalize_argv(args, size=0):
@@ -346,11 +336,11 @@ def normalize_argv(args, size=0):
     return args
 
 
-def to_hexstr(str_):
+def to_hexstr(b):
     """
     Convert a binary string to hex escape format
     """
-    return "".join(["\\x%02x" % ord(i) for i in bytes_iterator(str_)])
+    return ''.join([r'\x%02x' % ord(i) for i in bytes_iterator(b)])
 
 
 def to_hex(num):
@@ -358,9 +348,9 @@ def to_hex(num):
     Convert a number to hex format
     """
     if num < 0:
-        return "-0x%x" % (-num)
+        return '-0x%x' % (-num)
     else:
-        return "0x%x" % num
+        return '0x%x' % num
 
 
 def to_address(num):
@@ -370,9 +360,9 @@ def to_address(num):
     if num < 0:
         return to_hex(num)
     if num > 0xffffffff:  # 64 bit
-        return "0x%016x" % num
+        return '0x%016x' % num
     else:
-        return "0x%08x" % num
+        return '0x%08x' % num
 
 
 def to_int(val, base=0):
@@ -397,14 +387,14 @@ def str2hex(str):
 
 def hex2str(hexnum, intsize=4):
     """
-    Convert a number in hex format to string
+    Convert one number in hex format to string
     """
     if not isinstance(hexnum, six.string_types):
         nbits = intsize * 8
-        hexnum = "0x%x" % ((hexnum + (1 << nbits)) % (1 << nbits))
+        hexnum = '0x%x' % ((hexnum + (1 << nbits)) % (1 << nbits))
     s = hexnum[2:]
     if len(s) % 2 != 0:
-        s = "0" + s
+        s = '0' + s
     result = codecs.decode(s, 'hex')[::-1]
     return result
 
@@ -415,13 +405,13 @@ STRUCT_FORMAT_UNSIGNED = ('', 'B', 'H', '', 'L', '', '', '', 'Q')
 
 def int2str(num, intsize=4):
     """
-    Convert a number to raw string
+    Convert one number to raw string
     """
     if num < 0:
         mark = STRUCT_FORMAT_SIGNED[intsize]
     else:
         mark = STRUCT_FORMAT_UNSIGNED[intsize]
-    return struct.pack("<" + mark, num)
+    return struct.pack('<' + mark, num)
 
 
 def intlist2str(intlist, intsize=4):
@@ -464,11 +454,11 @@ def check_badchars(data, chars=None):
     else:
         data = to_hex(to_int(data))[2:]
         if len(data) % 2 != 0:
-            data = "0" + data
+            data = '0' + data
         to_search = codecs.decode(data, 'hex')
 
     if not chars:
-        chars = config.Option.get("badchars")
+        chars = config.Option.get('badchars')
 
     if chars:
         for c in chars:
@@ -481,10 +471,10 @@ def check_badchars(data, chars=None):
 def format_address(addr, type):
     """Colorize an address"""
     colorcodes = {
-        "data": "blue",
-        "code": "red",
-        "rodata": "green",
-        "value": None
+        'data': 'blue',
+        'code': 'red',
+        'rodata': 'green',
+        'value': None
     }
     return colorize(addr, colorcodes[type])
 
@@ -495,89 +485,38 @@ def format_reference_chain(chain):
     Colorize a chain of references
     """
     if not chain:
-        return "Cannot access memory address"
+        return 'Cannot access memory address'
     else:
         v = t = vn = None
         l = []
         first = True
         for (v, t, vn) in chain:
-            if t != "value":
-                l.append("%s%s " % ("--> " if not first else "", format_address(v, t)))
+            if t != 'value':
+                l.append('%s%s ' % ('--> ' if not first else '', format_address(v, t)))
             else:
-                l.append("%s%s " % ("--> " if not first else "", v))
+                l.append('%s%s ' % ('--> ' if not first else '', v))
             first = False
 
         if vn:
-            l.append("(%s)" % vn)
+            l.append('(%s)' % vn)
         else:
-            if v != "0x0":
+            if v != '0x0':
                 s = hex2str(v)
-                if is_printable(s, "\x00"):
-                    l.append("(%s)" % string_repr(s.split(b"\x00")[0]))
+                if is_printable(s, '\x00'):
+                    l.append('(%s)' % string_repr(s.split(b'\x00')[0]))
         return ''.join(l)
 
 
 # vulnerable C functions, source: rats/flawfinder
 VULN_FUNCTIONS = [
-    "exec", "system", "gets", "popen", "getenv", "strcpy", "strncpy", "strcat", "strncat",
-    "memcpy", "bcopy", "printf", "sprintf", "snprintf", "scanf", "getchar", "getc", "read",
-    "recv", "tmp", "temp"
+    'exec', 'system', 'gets', 'popen', 'getenv', 'strcpy', 'strncpy', 'strcat', 'strncat',
+    'memcpy', 'bcopy', 'printf', 'sprintf', 'snprintf', 'scanf', 'getchar', 'getc', 'read',
+    'recv', 'tmp', 'temp'
 ]
 
 
 @memoized
-def format_disasm_code(code, nearby=None):
-    """
-       Format output of disassemble command with colors to highlight:
-
-       Args:
-           - code: input asm code (String)
-           - nearby: address for nearby style format (Int)
-
-       Returns:
-           - colorized text code (String)
-       """
-
-    if not code:
-        return ''
-
-    if to_int(nearby) is not None:
-        target = to_int(nearby)
-    else:
-        target = 0
-
-    results = []
-    for line in code.splitlines():
-        if ":" not in line:  # not an assembly line
-            results.append(line)
-        else:
-            color = style = None
-            prefix = line.split(":\t")[0]
-            addr = re.search(r"(0x\S*)", prefix)
-            if addr:
-                addr = to_int(addr.group(1))
-            else:
-                addr = -1
-            line = "\t" + line.split(":\t", 1)[-1]
-            if addr < target:
-                style = "dark"
-            elif addr == target:
-                style = "bold"
-                color = "green"
-
-            code = colorize(line.split(";")[0], color, style)
-            if ";" in line:
-                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
-            else:
-                comment = ""
-            line = "%s:%s%s" % (prefix, code, comment)
-            results.append(line)
-
-    return '\n'.join(results)
-
-
-@memoized
-def format_disasm_code_arm(code, nearby=None):
+def format_disasm_code_with_opcode_color(code, current=None, opcode_color=None):
     """
     Format output of disassemble command with colors to highlight:
         - dangerous functions (rats/flawfinder)
@@ -586,83 +525,88 @@ def format_disasm_code_arm(code, nearby=None):
 
     Args:
         - code: input asm code (String)
-        - nearby: address for nearby style format (Int)
+        - current: address for current addr style format (Int)
+        - opcode_color: color for opcode (dict{opcode: color})
 
     Returns:
         - colorized text code (String)
     """
-    colorcodes = {
-        "cmp": "red",
-        "b": "yellow",  # jump
-    }
-
     if not code:
         return ''
 
-    if to_int(nearby) is not None:
-        target = to_int(nearby)
+    colorcodes = opcode_color if opcode_color else {}
+
+    if to_int(current) is not None:
+        target = to_int(current)
     else:
         target = 0
 
     results = []
     for line in code.splitlines():
-        if ":" not in line:  # not an assembly line
+        if ':' not in line:  # not an assembly line
             results.append(line)
+            continue
+
+        color = style = None
+        m = RE.DISASM_LINE_WITH_ADDR_OPCODE.search(line)
+        if not m:  # failed to parse
+            results.append(line)
+            continue
+
+        addr, opcode = m.group(1), m.group(2)
+        prefix, suffix = line.split(':\t', 1)
+
+        # first check VULN_FUNCTIONS
+        for f in VULN_FUNCTIONS:
+            if f in suffix:
+                style = 'bold, underline'
+                color = 'red'
+                break
         else:
-            color = style = None
-            m = re.search(r".*(0x\S*).*:\s*(\S*)", line)
-            if not m:  # failed to parse
-                results.append(line)
-                continue
-            addr, opcode = to_int(m.group(1)), m.group(2)
+            # then check manual color
             for c in colorcodes:
                 if opcode.startswith(c):
                     color = colorcodes[c]
-                    if c == 'b':
-                        for f in VULN_FUNCTIONS:
-                            if f in line.split(":\t", 1)[-1]:
-                                style = "bold, underline"
-                                color = "red"
-                                break
                     break
-
-            prefix = line.split(":\t")[0]
-            addr = re.search(r"(0x\S*)", prefix)
-            if addr:
-                addr = to_int(addr.group(1))
-            else:
+        # handle no color
+        if color is None:
+            addr = to_int(addr)
+            if addr is None:
                 addr = -1
-            line = "\t" + line.split(":\t", 1)[-1]
             if addr < target:
-                style = "dark"
+                style = 'dark'
             elif addr == target:
-                style = "bold"
-                color = "green"
+                style = 'bold'
+                color = 'green'
+        if ';' in suffix:
+            suffix_p, suffix_s = suffix.split(';', 1)
+            code = colorize(suffix_p, color, style)
+            comment = colorize(';' + suffix_s, color, 'dark')
+        else:
+            code = colorize(suffix, color, style)
+            comment = ''
+        line = '%s:\t%s%s' % (prefix, code, comment)
+        results.append(line)
 
-            code = colorize(line.split(";")[0], color, style)
-            if ";" in line:
-                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
-            else:
-                comment = ""
-            line = "%s:%s%s" % (prefix, code, comment)
-            results.append(line)
-
-    return '\n'.join(results)
+    return os.linesep.join(results)
 
 
 @memoized
-def format_disasm_code_intel(code, nearby=None):
-    """
-    Format output of disassemble command with colors to highlight:
-        - dangerous functions (rats/flawfinder)
-        - branching: jmp, call, ret
-        - testing: cmp, test
-    Args:
-        - code: input asm code (String)
-        - nearby: address for nearby style format (Int)
-    Returns:
-        - colorized text code (String)
-    """
+def format_disasm_code(code, current=None):
+    return format_disasm_code_with_opcode_color(code, current=current, opcode_color=None)
+
+
+@memoized
+def format_disasm_code_arm(code, current=None):
+    colorcodes = {
+        'cmp': 'red',
+        'b': 'yellow',  # jump
+    }
+    return format_disasm_code_with_opcode_color(code, current=current, opcode_color=colorcodes)
+
+
+@memoized
+def format_disasm_code_intel(code, current=None):
     colorcodes = {
         "cmp": "red",
         "test": "red",
@@ -670,217 +614,7 @@ def format_disasm_code_intel(code, nearby=None):
         "j": "yellow",  # jump
         "ret": "blue",
     }
-
-    if not code:
-        return ''
-
-    if to_int(nearby) is not None:
-        target = to_int(nearby)
-    else:
-        target = 0
-
-    results = []
-    for line in code.splitlines():
-        if ":" not in line:  # not an assembly line
-            results.append(line)
-        else:
-            color = style = None
-            m = re.search(r".*(0x\S*).*:\s*(\S*)", line)
-            if not m:  # failed to parse
-                results.append(line)
-                continue
-            addr, opcode = to_int(m.group(1)), m.group(2)
-            for c in colorcodes:
-                if c in opcode:
-                    color = colorcodes[c]
-                    if c == "call":
-                        for f in VULN_FUNCTIONS:
-                            if f in line.split(":\t", 1)[-1]:
-                                style = "bold, underline"
-                                color = "red"
-                                break
-                    break
-
-            prefix = line.split(":\t")[0]
-            addr = re.search(r"(0x\S*)", prefix)
-            if addr:
-                addr = to_int(addr.group(1))
-            else:
-                addr = -1
-            line = "\t" + line.split(":\t", 1)[-1]
-            if addr < target:
-                style = "dark"
-            elif addr == target:
-                style = "bold"
-                color = "green"
-
-            code = colorize(line.split(";")[0], color, style)
-            if ";" in line:
-                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
-            else:
-                comment = ""
-            line = "%s:%s%s" % (prefix, code, comment)
-            results.append(line)
-
-    return '\n'.join(results)
-
-
-#
-# def cyclic_pattern_charset(charset_type=None):
-#     """
-#     Generate charset for cyclic pattern
-#
-#     Args:
-#         - charset_type: charset type
-#             0: basic (0-9A-Za-z)
-#             1: extended (default)
-#             2: maximum (almost printable chars)
-#
-#     Returns:
-#         - list of charset
-#     """
-#
-#     charset = []
-#     charset += ["ABCDEFGHIJKLMNOPQRSTUVWXYZ"]  # string.uppercase
-#     charset += ["abcdefghijklmnopqrstuvwxyz"]  # string.lowercase
-#     charset += ["0123456789"]  # string.digits
-#
-#     if not charset_type:
-#         charset_type = config.Option.get("pattern")
-#
-#     if charset_type == 1:  # extended type
-#         charset[1] = "%$-;" + re.sub("[sn]", "", charset[1])
-#         charset[2] = "sn()" + charset[2]
-#
-#     if charset_type == 2:  # maximum type
-#         charset += ['!"#$%&\()*+,-./:;<=>?@[]^_{|}~']  # string.punctuation
-#
-#     mixed_charset = mixed = ''
-#     k = 0
-#     while True:
-#         for i in range(0, len(charset)): mixed += charset[i][k:k + 1]
-#         if not mixed: break
-#         mixed_charset += mixed
-#         mixed = ''
-#         k += 1
-#
-#     return mixed_charset
-#
-#
-# def de_bruijn(charset, n, maxlen):
-#     """
-#     Generate the De Bruijn Sequence up to `maxlen` characters for the charset `charset`
-#     and subsequences of length `n`.
-#     Algorithm modified from wikipedia http://en.wikipedia.org/wiki/De_Bruijn_sequence
-#     """
-#     k = len(charset)
-#     a = [0] * k * n
-#     sequence = []
-#
-#     def db(t, p):
-#         if len(sequence) == maxlen:
-#             return
-#
-#         if t > n:
-#             if n % p == 0:
-#                 for j in range(1, p + 1):
-#                     sequence.append(charset[a[j]])
-#                     if len(sequence) == maxlen:
-#                         return
-#         else:
-#             a[t] = a[t - p]
-#             db(t + 1, p)
-#             for j in range(a[t - p] + 1, k):
-#                 a[t] = j
-#                 db(t + 1, t)
-#
-#     db(1, 1)
-#     return ''.join(sequence)
-#
-#
-# @memoized
-# def cyclic_pattern(size=None, start=None, charset_type=None):
-#     """
-#     Generate a cyclic pattern
-#
-#     Args:
-#         - size: size of generated pattern (Int)
-#         - start: the start offset of the generated pattern (Int)
-#         - charset_type: charset type
-#             0: basic (0-9A-Za-z)
-#             1: extended (default)
-#             2: maximum (almost printable chars)
-#
-#     Returns:
-#         - pattern text (byte string) (str in Python 2; bytes in Python 3)
-#     """
-#     charset = config.Option.get("p_charset")
-#     if not charset:
-#         charset = cyclic_pattern_charset(charset)
-#     else:
-#         charset = ''.join(set(charset))
-#
-#     if start is None:
-#         start = 0
-#     if size is None:
-#         size = 0x10000
-#
-#     size += start
-#
-#     pattern = de_bruijn(charset, 3, size)
-#
-#     return pattern[start:size].encode('utf-8')
-#
-#
-# @memoized
-# def cyclic_pattern_offset(value):
-#     """
-#     Search a value if it is a part of cyclic pattern
-#
-#     Args:
-#         - value: value to search for (String/Int)
-#
-#     Returns:
-#         - offset in pattern if found
-#     """
-#     pattern = cyclic_pattern()
-#     if to_int(value) is None:
-#         search = value.encode('utf-8')
-#     else:
-#         search = hex2str(to_int(value))
-#
-#     pos = pattern.find(search)
-#     return pos if pos != -1 else None
-#
-#
-# def cyclic_pattern_search(buf):
-#     """
-#     Search all cyclic pattern pieces in a buffer
-#
-#     Args:
-#         - buf: buffer to search for (String)
-#
-#     Returns:
-#         - list of tuple (buffer_offset, pattern_len, pattern_offset)
-#     """
-#     result = []
-#     pattern = cyclic_pattern()
-#
-#     p = re.compile(b"[" + re.escape(to_binary_string(cyclic_pattern_charset())) + b"]{4,}")
-#     found = p.finditer(buf)
-#     found = list(found)
-#     for m in found:
-#         s = buf[m.start():m.end()]
-#         i = pattern.find(s)
-#         k = 0
-#         while i == -1 and len(s) > 4:
-#             s = s[1:]
-#             k += 1
-#             i = pattern.find(s)
-#         if i != -1:
-#             result += [(m.start() + k, len(s), i)]
-#
-#     return result
+    return format_disasm_code_with_opcode_color(code, current=current, opcode_color=colorcodes)
 
 
 def _decode_string_escape_py2(str_):
@@ -905,7 +639,7 @@ def _decode_string_escape_py3(str_):
 
 def decode_string_escape(str_):
     """Generic Python string escape"""
-    raise NotImplementedError('Should be overriden')
+    raise NotImplementedError('Should be overridden')
 
 
 def bytes_iterator(bytes_):
@@ -916,7 +650,7 @@ def bytes_iterator(bytes_):
     Wrap this around a bytestring when you need to iterate to be compatible
     with Python 2 and Python 3.
     """
-    raise Exception('Should be overriden')
+    raise NotImplementedError('Should be overridden')
 
 
 def _bytes_iterator_py2(bytes_):
@@ -946,7 +680,7 @@ def bytes_chr(i):
 
     Use this instead of chr to be compatible with Python 2 and Python 3.
     """
-    raise Exception('Should be overriden')
+    raise NotImplementedError('Should be overridden')
 
 
 def _bytes_chr_py2(i):
@@ -974,7 +708,7 @@ def to_binary_string(text):
 
     Use this instead of six.b when the text may already be a binary type
     """
-    raise Exception('Should be overriden')
+    raise NotImplementedError('Should be overridden')
 
 
 def _to_binary_string_py2(text):
@@ -1027,7 +761,7 @@ def dbg_print_vars(*args):
             if id(arg) == id(value):
                 maps.append((name, repr(value)))
                 break
-    print('\n'.join(name + '=' + value for name, value in maps))
+    print(os.linesep.join(name + '=' + value for name, value in maps))
 
 
 def string_repr(text, show_quotes=True):
@@ -1118,3 +852,65 @@ def which(filename, env=None):
         if is_executable_file(ff):
             return ff
     return None
+
+
+class RE:
+    # disasm line to addr and opcode
+    # => 0xfffff7dd8500 <__libc_start_main_impl>:     stp     x29, x30, [sp, #-96]!
+    DISASM_LINE_WITH_ADDR_OPCODE = re.compile(r'[^0x]*(0x\S*)[^:]*:\s*(\S*)')
+
+    # disasm line to target addr with/without 0x
+    # 0xfffff7dd84f8 <__libc_start_call_main+168>: bl      0xfffff7def2f0 <__GI_exit>
+    DISASM_LINE_WITH_TARGET_ADDR = re.compile(r'[^:]*:\s*\S*\s*(0x)?(\S*)')
+
+    # disasm line to comment addr. todo: should we check '//' ?
+    # 0xfffff7dd84f4 <__libc_start_call_main+164>: mov     w0, #0x0                        // #0
+    DISASM_LINE_WITH_COMMENTS = re.compile(r'[^#]+#\s*(0x\S*)')
+
+    # disasm line to content which trim addr
+    DISASM_LINE_WITH_CONTENT = re.compile(r'.*0x[^ ]+\s*(.*)')
+
+    # memory access with []
+    # DWORD PTR [esi+eax*1]
+    MEMORY_ACCESS = re.compile(r'([^\[\]]*)\[([^\[\]]*)]')
+
+    # memory pointer calculator
+    # DWORD PTR ds:0xdeadbeef
+    MEMORY_POINTER = re.compile(r'([^:]*).s:(0x\S+)')
+
+    # maps in freebsd
+    # 0x8048000 0x8049000 1 0 0xc36afdd0 r-x 1 0 0x1000 COW NC vnode /path/to/file NCH -1
+    VMMAP_FREEBSD = re.compile(r'0x([0-9a-f]*) 0x([0-9a-f]*)(?: [^ ]*){3} ([rwx-]*)(?: [^ ]*){6} ([^ ]*)')
+
+    # maps in linux
+    # 00400000-0040b000 r-xp 00000000 08:02 538840  /path/to/file
+    VMMAP_LINUX = re.compile(r'^([0-9a-f]+)-([0-9a-f]+) ([-rwxps]+)(?: \S+){3} *(.*)$', re.MULTILINE)
+
+    # find entry addr
+    ENTRY_POINT = re.compile(r'Entry point: (\S+)')
+
+    # output of maintenance info sections
+    #  [0]      0xaaaaaaaa0238->0xaaaaaaaa0253 at 0x00000238: .interp ALLOC LOAD READONLY DATA HAS_CONTENTS
+    MAINTENANCE_INFO_SECTIONS = re.compile(r'^ *\S+ +(0x[^-]+)->(0x[^ ]+) at (\S+): +(\S+) +(.*)$', re.M)
+
+    # output of info files
+    #         0x0000fffff7dd7990 - 0x0000fffff7dd7b88 is .rela.plt in /lib/aarch64-linux-gnu/libc.so.6
+    INFO_FILES = re.compile(r"^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
+
+    # used to check which reg in disasm code
+    ARM_DISASM_WITH_REGS = re.compile(r":\s*(\S+)\s*(\w+),")
+
+    # used to check str opcode in disasm code
+    #  '0x8d08: str     r3, [sp, #20]'
+    ARM_DISASM_WITH_STR = re.compile(r":\s*str\s*[^,\s]+,\s*\[sp[^#]*#(\S*)]")
+
+    # used to check jmp opcode b??
+    # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
+    ARM_DISASM_WITH_JMP = re.compile(r'.*:\s+(b[l|x]{0,2})\.?(\S{0}|\S{2})(\.w|\.n)?\s+')
+
+    # used to check cb opcode
+    # inst='=> 0xaf130bd4:\tcbz\tr0, 0xaf130be4'
+    ARM_DISASM_WITH_CB = re.compile(r'.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)')
+
+    # used to check 'mov [esp, ??]' opcode in disasm code
+    INTEL_DISASM_WITH_ESP = re.compile(r".*mov.*\[esp(.*)],")
