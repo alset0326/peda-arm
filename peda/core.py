@@ -2996,7 +2996,7 @@ class PEDACmd(object):
                 output = []
                 while len(text) > 0:
                     line = text.pop()
-                    if len(line) >= half_width:
+                    if len_colorized(line) >= half_width:
                         if half_line is not None:
                             output.append(half_line)
                             half_line = None
