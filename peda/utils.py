@@ -128,7 +128,27 @@ def colorize(text, color=None, attrib=None):
     return ''.join([CPRE, ''.join(ccode), 'm', text, CSUF])
 
 
-def len_colorized(text: str):
+def len_with_tab(text, cur=0, start=0, end=-1, tab_size=8):
+    """
+    Get real length of text with tab as spaces
+    Args:
+        - cur (int): current length when counting
+    Returns:
+        - with param cur added
+    """
+    end = end if end > 0 else len(text)
+    while start < end:
+        i = text.find('\t', start, end)
+        if i == -1:
+            cur += end - start
+            break
+        cur += i - start
+        cur += tab_size - (cur % tab_size)
+        start = i + 1
+    return cur
+
+
+def len_colorized(text, handle_tab=True):
     """
     Get real length of colorized text
     """
@@ -139,8 +159,12 @@ def len_colorized(text: str):
     while True:
         i = text.find(START, cur)
         if i == -1:
-            length += len(text) - cur
+            if not handle_tab:
+                length += len(text) - cur
+            else:
+                length = len_with_tab(text, length, cur)
             break
+        # todo: handle tab here?
         length += i - cur
         cur = text.find(END, i + 2) + 1
         if cur == -1:
