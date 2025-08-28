@@ -116,15 +116,15 @@ class PEDA(object):
             else:
                 return out.split(':\t')[-1].strip()
 
-        out = PEDA.execute_redirect('print %s' % exp)
-
-        if not out:
-            return None
-
-        out = str(gdb.history(0))
-        out = out.encode('ascii', 'ignore')
-        out = decode_string_escape(out)
-        return out.strip()
+        try:
+            return str(gdb.parse_and_eval(exp))
+        except:
+            if not PEDA.execute_redirect('print %s' % exp):
+                return None
+            out = str(gdb.history(0))
+            out = out.encode('ascii', 'ignore')
+            out = decode_string_escape(out)
+            return out.strip()
 
     def string_to_argv(self, str):
         """
