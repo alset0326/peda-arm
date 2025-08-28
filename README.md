@@ -1,27 +1,41 @@
-
 peda-arm
 ====
 
 PEDA-ARM - Python Exploit Development Assistance for GDB
 
-Finally, we merged the original peda and peda-arm. Use `peda-intel.py` to the original peda, and `peda-arm.py` to the new arm peda.
+Finally, we merged the original peda and peda-arm. Use `peda-intel.py` to the original peda, and `peda-arm.py` to the
+new arm peda.
 
 longld's peda is amazing. But it cannot work on ARM, especially on Android. So I made some change.
 
 Target ARM is still testing. AARCH64 is now under developing.
 
+**Update in 2025-08-28:**
+
+Try to make PEDA-ARM as a purer, lighter and more flexible debugging tools by moving more functions to plugins. Type "
+plugin" to see more help. Currently, plugins support:
+
+- plugin sample: the example plugin
+- plugin cyclic: the cyclic string generate
+- plugin intelasm: assemble on x86/x64 platform
+- plugin armasm: assemble on arm/arm64 platform
+- plugin libheap: install [libheap](https://github.com/cloudburst/libheap) via plugin
+
 ## Key Features:
+
 * Just support all commands on original PEDA (except the part of shellcode)
 * Use `help peda` to show all the peda help
 
 ## Updated Features:
+
 * Add source code context (if it has source code)
 * Add system call detect
 * Support ARM style jump instructions (b*/cbz) detect
 * Support full arm/thumb assemble
 * Add plugin framework. Now you can write your own plugins easily based on peda command
 * Add multiple welcome logos (Your gdb need to support zlib)
-* Enhance display. Make the length of the separation lines auto detect (Image is too large to display. Just find out yourself)
+* Enhance display. Make the length of the separation lines auto detect (Image is too large to display. Just find out
+  yourself)
 * Support both remote and local debug
 * And so many features that I don't remember
 
