@@ -475,7 +475,7 @@ class ArmPEDACmd(PEDACmd):
         if opcode.startswith('b'):  # check if is b?? opcode
             jumpto = self._testjump(inst)
             if jumpto:  # JUMP is taken
-                code = peda.disassemble_around(pc, count)
+                code = peda.disasm_add_regs_comments(peda.disassemble_around(pc, count))
                 pc_idx = 999
                 text = []
                 for (idx, line) in enumerate(code.splitlines()):
@@ -508,13 +508,14 @@ class ArmPEDACmd(PEDACmd):
                 msg(os.linesep.join(text))
                 self.dumpargs()
             else:  # JUMP is NOT taken
-                text = format_disasm_code_arm(peda.disassemble_around(pc, count), pc) + os.linesep + green(
-                    'JUMP is NOT taken'.rjust(self.width))
+                text = format_disasm_code_arm(
+                    peda.disasm_add_regs_comments(peda.disassemble_around(pc, count)), pc
+                ) + os.linesep + green('JUMP is NOT taken'.rjust(self.width))
                 msg(text.rstrip())
         elif opcode.startswith('cb'):
             jumpto = self._testjump_cb(inst)
             if jumpto:  # JUMP is taken
-                code = peda.disassemble_around(pc, count)
+                code = peda.disasm_add_regs_comments(peda.disassemble_around(pc, count))
                 pc_idx = 999
                 text = []
                 for (idx, line) in enumerate(code.splitlines()):
@@ -535,12 +536,13 @@ class ArmPEDACmd(PEDACmd):
                 text.append(red('JUMP is taken'.rjust(self.width)))
                 msg(os.linesep.join(text))
             else:  # JUMP is NOT taken
-                text = format_disasm_code_arm(peda.disassemble_around(pc, count), pc) + os.linesep + green(
-                    'JUMP is NOT taken'.rjust(self.width))
+                text = format_disasm_code_arm(
+                    peda.disasm_add_regs_comments(peda.disassemble_around(pc, count)), pc
+                ) + os.linesep + green('JUMP is NOT taken'.rjust(self.width))
                 msg(text)
         # stopped at other instructions
         else:
-            text = peda.disassemble_around(pc, count)
+            text = peda.disasm_add_regs_comments(peda.disassemble_around(pc, count))
             msg(format_disasm_code_arm(text, pc))
             if 'svc' in opcode:
                 msg('')

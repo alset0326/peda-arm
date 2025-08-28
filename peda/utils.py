@@ -128,6 +128,26 @@ def colorize(text, color=None, attrib=None):
     return ''.join([CPRE, ''.join(ccode), 'm', text, CSUF])
 
 
+def len_colorized(text: str):
+    """
+    Get real length of colorized text
+    """
+    #
+    START, END = '\033[', 'm'
+    length = 0
+    cur = 0
+    while True:
+        i = text.find(START, cur)
+        if i == -1:
+            length += len(text) - cur
+            break
+        length += i - cur
+        cur = text.find(END, i + 2) + 1
+        if cur == -1:
+            raise ValueError("invalid ansi color")
+    return length
+
+
 def green(text, attrib=None):
     """Wrapper for colorize(text, 'green')"""
     return colorize(text, 'green', attrib)
@@ -578,10 +598,10 @@ def format_disasm_code_with_opcode_color(code, current=None, opcode_color=None):
             elif addr == target:
                 style = 'bold'
                 color = 'green'
-        if ';' in suffix:
-            suffix_p, suffix_s = suffix.split(';', 1)
+        if '//' in suffix:
+            suffix_p, suffix_s = suffix.split('//', 1)
             code = colorize(suffix_p, color, style)
-            comment = colorize(';' + suffix_s, color, 'dark')
+            comment = colorize('//' + suffix_s, color, 'dark')
         else:
             code = colorize(suffix, color, style)
             comment = ''
@@ -608,11 +628,11 @@ def format_disasm_code_arm(code, current=None):
 @memoized
 def format_disasm_code_intel(code, current=None):
     colorcodes = {
-        "cmp": "red",
-        "test": "red",
-        "call": "green",
-        "j": "yellow",  # jump
-        "ret": "blue",
+        'cmp': 'red',
+        'test': 'red',
+        'call': 'green',
+        'j': 'yellow',  # jump
+        'ret': 'blue',
     }
     return format_disasm_code_with_opcode_color(code, current=current, opcode_color=colorcodes)
 
@@ -634,7 +654,7 @@ def _decode_string_escape_py3(str_):
     """
 
     # Based on: http://stackoverflow.com/a/4020824
-    return codecs.decode(str_, "unicode_escape")
+    return codecs.decode(str_, 'unicode_escape')
 
 
 def decode_string_escape(str_):
@@ -748,7 +768,7 @@ elif six.PY3:
     bytes_chr = _bytes_chr_py3
     to_binary_string = _to_binary_string_py3
 else:
-    raise Exception("Could not identify Python major version")
+    raise Exception('Could not identify Python major version')
 
 
 def dbg_print_vars(*args):
@@ -825,7 +845,7 @@ def is_executable_file(path):
         # of their executability -- instead, any permission bit of any user,
         # group, or other is fine enough.
         #
-        # (This may be true for other "Unix98" OS's such as HP-UX and AIX)
+        # (This may be true for other 'Unix98' OS's such as HP-UX and AIX)
         return bool(mode & (stat.S_IXUSR |
                             stat.S_IXGRP |
                             stat.S_IXOTH))
@@ -893,16 +913,24 @@ class RE:
     #  [0]      0xaaaaaaaa0238->0xaaaaaaaa0253 at 0x00000238: .interp ALLOC LOAD READONLY DATA HAS_CONTENTS
     MAINTENANCE_INFO_SECTIONS = re.compile(r'^ *\S+ +(0x[^-]+)->(0x[^ ]+) at (\S+): +(\S+) +(.*)$', re.M)
 
+    # get reg name and value from info reg
+    # w17            0xf7dd8500          0xf7dd8500
+    # cpsr           0x60001000          [ EL=0 BTYPE=0 SSBS C Z ]
+    INFO_REGISTERS = re.compile(r'^(\w+)\s+(\w+)\s+.*$', re.M)
+
+    # used to split string with no word
+    NOWORD_SPLIT = re.compile(r'\W')
+
     # output of info files
     #         0x0000fffff7dd7990 - 0x0000fffff7dd7b88 is .rela.plt in /lib/aarch64-linux-gnu/libc.so.6
-    INFO_FILES = re.compile(r"^ *(0x\S+) - (0x\S+) is (\.\S+) in (\S+)")
+    INFO_FILES = re.compile(r'^\s*(0x\S+) - (0x\S+) is (\.\S+) in (\S+)$', re.M)
 
     # used to check which reg in disasm code
-    ARM_DISASM_WITH_REGS = re.compile(r":\s*(\S+)\s*(\w+),")
+    ARM_DISASM_WITH_REGS = re.compile(r':\s*(\S+)\s*(\w+),')
 
     # used to check str opcode in disasm code
     #  '0x8d08: str     r3, [sp, #20]'
-    ARM_DISASM_WITH_STR = re.compile(r":\s*str\s*[^,\s]+,\s*\[sp[^#]*#(\S*)]")
+    ARM_DISASM_WITH_STR = re.compile(r':\s*str\s*[^,\s]+,\s*\[sp[^#]*#(\S*)]')
 
     # used to check jmp opcode b??
     # inst='=> 0x8b84 <_start+40>:\tblxeq.n\t0xa3bc <__libc_start_main>'
@@ -913,4 +941,4 @@ class RE:
     ARM_DISASM_WITH_CB = re.compile(r'.*:\s+cb(n?z)?\s+(\S+),\s*(\S+)')
 
     # used to check 'mov [esp, ??]' opcode in disasm code
-    INTEL_DISASM_WITH_ESP = re.compile(r".*mov.*\[esp(.*)],")
+    INTEL_DISASM_WITH_ESP = re.compile(r'.*mov.*\[esp(.*)],')

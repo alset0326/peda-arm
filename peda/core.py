@@ -475,17 +475,15 @@ class PEDA(object):
             reglist = reglist.replace(',', ' ')
         else:
             reglist = ''
-        regs = PEDA.execute_redirect('info registers %s' % reglist)
-        if not regs:
+        out = PEDA.execute_redirect('info registers %s' % reglist)
+        if not out:
             return None
 
         result = {}
-        if regs:
-            for r in regs.splitlines():
-                r = r.split()
-                if len(r) > 1 and to_int(r[1]) is not None:
-                    result[r[0]] = to_int(r[1])
-
+        for m in RE.INFO_REGISTERS.finditer(out):
+            value = to_int(m.group(2))
+            if value is not None:
+                result[m.group(1)] = value
         return result
 
     def getreg(self, register):
@@ -499,15 +497,10 @@ class PEDA(object):
             - register value (Int)
         """
         r = register.lower()
-        regs = PEDA.execute_redirect('info registers %s' % r)
-        if regs:
-            regs = regs.splitlines()
-            if len(regs) > 1:
-                return None
-            else:
-                result = to_int(regs[0].split()[1])
-                return result
-
+        out = PEDA.execute_redirect('info registers %s' % r)
+        if out:
+            for m in RE.INFO_REGISTERS.finditer(out):
+                return to_int(m.group(2))
         return None
 
     def getpc(self):
@@ -649,6 +642,25 @@ class PEDA(object):
         """
         code = PEDA.execute_redirect('x/%di 0x%x' % (count, address))
         return code.rstrip()
+
+    def disasm_add_regs_comments(self, code):
+        """
+        add comments to each line if it has regs
+        Args:
+            code: the whole code with linesep
+        """
+
+        regs = self.getregs('all')
+        reg_names = set(regs.keys())
+        l = []
+        for line in code.splitlines():
+            words = set(RE.NOWORD_SPLIT.split(line))
+            line = [line]
+            for reg in (reg_names & words):
+                # todo: use examine_mem_value?
+                line.append(' \t// %s => 0x%x' % (reg, regs[reg]))
+            l.append(''.join(line))
+        return os.linesep.join(l)
 
     @memoized
     def backtrace_depth(self):
@@ -2426,6 +2438,7 @@ class PEDACmd(object):
         msg(text)
         if inst:  # valid $PC
             text = self.peda.disassemble_around(pc, count)
+            text = self.peda.disasm_add_regs_comments(text)
             msg(format_disasm_code(text, pc))
         else:  # invalid $PC
             msg('Invalid $PC address: 0x%x' % pc, 'red')
@@ -2968,11 +2981,36 @@ class PEDACmd(object):
                 for r in self.peda.register_names():
                     if r in regs:
                         text.append(get_reg_text(r, regs[r]))
-            else:
+            elif regs is not None:
                 for (r, v) in sorted(regs.items()):
                     text.append(get_reg_text(r, v))
-            if len(text) > 0:
-                msg(os.linesep.join(text))
+
+            if len(text) == 0:
+                return
+
+            if len(text) > 9:
+                # split regs to 2 pane
+                half_width = self.width // 2
+                half_line = None
+                text.reverse()
+                output = []
+                while len(text) > 0:
+                    line = text.pop()
+                    if len(line) >= half_width:
+                        if half_line is not None:
+                            output.append(half_line)
+                            half_line = None
+                        output.append(line)
+                    elif half_line is not None:
+                        output.append(half_line + ' ' * (half_width - len_colorized(half_line)) + line)
+                        half_line = None
+                    else:
+                        half_line = line
+                if half_line is not None:
+                    output.append(half_line)
+            else:
+                output = text
+            msg(os.linesep.join(output))
 
         elif to_int(address) is None:
             warning('not a register nor an address')
