@@ -1,4 +1,4 @@
-def invoke(peda, *arg):
+def invoke(peda, *args):
     """
     Sample invoke
     Usage:

@@ -268,7 +268,7 @@ def assemble(peda, mode, address):
     return
 
 
-def invoke(peda, *arg):
+def invoke(peda, *args):
     """
     Sample invoke
     Usage:
@@ -283,7 +283,7 @@ def invoke(peda, *arg):
             return
         asm.set_prefix(prefix)
 
-    (mode, address) = normalize_argv(arg, 2)
+    (mode, address) = normalize_argv(args, 2)
     assemble(peda, mode, address)
 
 

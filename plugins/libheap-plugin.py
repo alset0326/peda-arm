@@ -1,9 +1,9 @@
 import os
-import sys
 import subprocess
+import sys
 
-from peda.utils import normalize_argv, error
 from peda.core import PEDA
+from peda.utils import normalize_argv, error
 
 filepath = os.path.abspath(os.path.expanduser(__file__))
 dirpath = os.path.dirname(filepath)
@@ -25,8 +25,8 @@ except ImportError:
     pass
 
 
-def invoke(peda, *arg):
-    update, = normalize_argv(arg, 1)
+def invoke(peda, *args):
+    update, = normalize_argv(args, 1)
 
     if update is not None and update.startswith('u'):
         cmd = ' '.join(['cd', libheappath, ';', 'git', 'pull', '--all'])

@@ -142,7 +142,7 @@ def _readelf_header(self, filename, name=None):
 
 # readelf_header(), elfheader_solib()
 # todo: merge with plugin?
-def readelf(self, *arg):
+def readelf(self, *args):
     """
     Get headers information from an ELF file
     Usage:
@@ -150,7 +150,7 @@ def readelf(self, *arg):
         MYNAME filename [header_name]
     """
 
-    (filename, hname) = normalize_argv(arg, 2)
+    (filename, hname) = normalize_argv(args, 2)
     # result = {}
     # maps = peda.get_vmmap()
     if filename is None:  # fallback to elfheader()
@@ -247,14 +247,14 @@ def assemble(peda, mode, address):
         msg('hexify: "%s"' % to_hexstr(inst_code))
 
 
-def invoke(peda, *arg):
+def invoke(peda, *args):
     """
     Sample invoke
     Usage:
         intelasm [mode] [address]
             mode: -b16 / -b32 / -b64
     """
-    (mode, address) = normalize_argv(arg, 2)
+    (mode, address) = normalize_argv(args, 2)
     assemble(peda, mode, address)
 
 

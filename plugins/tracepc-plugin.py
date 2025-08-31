@@ -19,14 +19,14 @@ def disable_log(peda):
     peda.execute('set logging off')
 
 
-def invoke(peda, *arg):
+def invoke(peda, *args):
     """
     Print pc until target pc
     Usage:
         tracepc target-pc [out-file]
     """
 
-    (target_pc, filename) = normalize_argv(arg, 2)
+    (target_pc, filename) = normalize_argv(args, 2)
     target_pc = to_int(target_pc)
     if target_pc is None:
         raise Exception()

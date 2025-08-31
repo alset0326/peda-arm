@@ -218,7 +218,7 @@ class ArmPEDACmd(PEDACmd):
 
     # get_function_args()
     @msg.bufferize
-    def dumpargs(self, *arg):
+    def dumpargs(self, *args):
         """
         Display arguments passed to a function when stopped at a call instruction
         Usage:
@@ -226,7 +226,7 @@ class ArmPEDACmd(PEDACmd):
                 count: force to display 'count args' instead of guessing
         """
 
-        (count,) = normalize_argv(arg, 1)
+        (count,) = normalize_argv(args, 1)
         if not self._is_running():
             return
 
@@ -270,7 +270,7 @@ class ArmPEDACmd(PEDACmd):
 
         return function_name, name, len(params), params, args
 
-    def syscall(self, *arg):
+    def syscall(self, *args):
         """
         Display information at a system call instruction
         Usage:
@@ -280,7 +280,7 @@ class ArmPEDACmd(PEDACmd):
         if SYSTEM_CALLS is None:
             return
 
-        (num,) = normalize_argv(arg, 1)
+        (num,) = normalize_argv(args, 1)
         if not self._is_running():
             return
 
@@ -305,7 +305,7 @@ class ArmPEDACmd(PEDACmd):
 
         return
 
-    def syscall_detail(self, *arg):
+    def syscall_detail(self, *args):
         """
         Display details at a system call instruction
         Usage:
@@ -314,7 +314,7 @@ class ArmPEDACmd(PEDACmd):
         """
         if SYSTEM_CALLS is None:
             return
-        (num,) = normalize_argv(arg, 1)
+        (num,) = normalize_argv(args, 1)
         if num is None:
             self._missing_argument()
         if to_int(num) is not None:
@@ -324,13 +324,13 @@ class ArmPEDACmd(PEDACmd):
         peda.execute('shell man 2 %s' % func_name)
 
     # wrapper for stepuntil('j')
-    def nextjmp(self, *arg):
+    def nextjmp(self, *args):
         """
         Step until next 'j*' instruction in specific memory range
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(arg, 2)
+        (keyword, mapname) = normalize_argv(args, 2)
         if keyword:
             self.stepuntil('b.*%s' % keyword, mapname)
         else:
@@ -444,13 +444,13 @@ class ArmPEDACmd(PEDACmd):
             return None
 
     @msg.bufferize
-    def context_code(self, *arg):
+    def context_code(self, *args):
         """
         Display nearby disassembly at $PC of current execution context
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(arg, 1)
+        (count,) = normalize_argv(args, 1)
 
         if count is None:
             count = 8
@@ -614,7 +614,7 @@ class ArmPEDACmd(PEDACmd):
 
         return True
 
-    def cpsr(self, *arg):
+    def cpsr(self, *args):
         """
         Display/set/clear value of cpsr register
         Usage:
@@ -623,7 +623,7 @@ class ArmPEDACmd(PEDACmd):
             MYNAME [set|clear|toggle] flagname
         """
 
-        (option, flagname) = normalize_argv(arg, 2)
+        (option, flagname) = normalize_argv(args, 2)
         if not self._is_running():
             return
 
@@ -659,7 +659,7 @@ class ArmPEDACmd(PEDACmd):
 
     cpsr.options = ['set', 'clear']
 
-    def xinfo(self, *arg):
+    def xinfo(self, *args):
         """
         Display detail information of address/registers
         Usage:
@@ -667,11 +667,11 @@ class ArmPEDACmd(PEDACmd):
             MYNAME register [reg1 reg2]
         """
 
-        (address, regname) = normalize_argv(arg, 2)
+        (address, regname) = normalize_argv(args, 2)
         if address is None:
             self._missing_argument()
 
-        super(ArmPEDACmd, self).xinfo(*arg)
+        super(ArmPEDACmd, self).xinfo(*args)
         if str(address).startswith('r'):
             if regname is None or 'cpsr' in regname:
                 self.cpsr()
@@ -692,7 +692,7 @@ if __name__ == '__main__':
 
     # register 'peda' command in gdb
     info('Registering commands.')
-    pedaGDBCommand(peda, pedacmd)
+    PedaGDBCommand(peda, pedacmd)
     Alias('pead', 'peda')  # just for auto correction
 
     # create aliases for subcommands

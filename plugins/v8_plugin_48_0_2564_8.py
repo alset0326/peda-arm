@@ -117,11 +117,10 @@
   HeapObject: [32 bit direct pointer] (4 byte aligned) | 01
 """
 
-import struct
 import traceback
-from v8_globals_48_0_2564_8 import *
-from peda import config
+
 from peda.utils import *
+from v8_globals_48_0_2564_8 import *
 
 
 def has_smi_tag(v):
@@ -2672,7 +2671,7 @@ NAME_TO_TYPE = {
 }
 
 
-def invoke(peda_, *arg):
+def invoke(peda_, *args):
     """
     Google v8 debug helper
     Usage:
@@ -2680,7 +2679,7 @@ def invoke(peda_, *arg):
     """
     global peda
     peda = peda_
-    (opt, addr) = normalize_argv(arg, 2)
+    (opt, addr) = normalize_argv(args, 2)
 
     type_name = NAME_TO_TYPE.get(opt)
 

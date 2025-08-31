@@ -168,7 +168,7 @@ def cyclic_pattern_search(buf):
 
 
 # cyclic_pattern()
-def pattern_create(*arg):
+def pattern_create(*args):
     """
     Generate a cyclic pattern
     Set "pattern" option for basic/extended pattern type
@@ -176,7 +176,7 @@ def pattern_create(*arg):
         cyclic create size [file]
     """
 
-    (size, filename) = normalize_argv(arg, 2)
+    (size, filename) = normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_create)
         return
@@ -190,7 +190,7 @@ def pattern_create(*arg):
 
 
 # cyclic_pattern()
-def pattern_offset(*arg):
+def pattern_offset(*args):
     """
     Search for offset of a value in cyclic pattern
     Set "pattern" option for basic/extended pattern type
@@ -198,7 +198,7 @@ def pattern_offset(*arg):
         cyclic offset value
     """
 
-    (value,) = normalize_argv(arg, 1)
+    (value,) = normalize_argv(args, 1)
     if value is None:
         _missing_argument(pattern_offset)
         return
@@ -211,7 +211,7 @@ def pattern_offset(*arg):
 
 
 # cyclic_pattern(), searchmem_*()
-def pattern_search(*arg):
+def pattern_search(*args):
     """
     Search a cyclic pattern in registers and memory
     Set "pattern" option for basic/extended pattern type
@@ -308,7 +308,7 @@ def pattern_search(*arg):
 
 
 # cyclic_pattern(), writemem()
-def pattern_patch(*arg):
+def pattern_patch(*args):
     """
     Write a cyclic pattern to memory
     Set "pattern" option for basic/extended pattern type
@@ -316,7 +316,7 @@ def pattern_patch(*arg):
         cyclic patch address size
     """
 
-    (address, size) = normalize_argv(arg, 2)
+    (address, size) = normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_patch)
         return
@@ -330,7 +330,7 @@ def pattern_patch(*arg):
 
 
 # cyclic_pattern()
-def pattern_arg(*arg):
+def pattern_arg(*args):
     """
     Set argument list with cyclic pattern
     Set "pattern" option for basic/extended pattern type
@@ -338,12 +338,12 @@ def pattern_arg(*arg):
         cyclic arg size1 [size2,offset2] ...
     """
 
-    if not arg:
+    if not args:
         _missing_argument(pattern_arg)
         return
 
     arglist = []
-    for a in arg:
+    for a in args:
         (size, offset) = (a + ",").split(",")[:2]
         if offset:
             offset = to_int(offset)
@@ -367,7 +367,7 @@ def pattern_arg(*arg):
 
 
 # cyclic_pattern()
-def pattern_env(*arg):
+def pattern_env(*args):
     """
     Set environment variable with a cyclic pattern
     Set "pattern" option for basic/extended pattern type
@@ -375,12 +375,12 @@ def pattern_env(*arg):
         cyclic env ENVNAME size[,offset]
     """
 
-    (env, size) = normalize_argv(arg, 2)
+    (env, size) = normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_env)
         return
 
-    (size, offset) = (arg[1] + ",").split(",")[:2]
+    (size, offset) = (args[1] + ",").split(",")[:2]
     size = to_int(size)
     if offset:
         offset = to_int(offset)
@@ -394,7 +394,7 @@ def pattern_env(*arg):
     info("Set environment %s = cyclic_pattern(%d, %d)" % (env, size, offset))
 
 
-def invoke(_peda, *arg):
+def invoke(_peda, *args):
     """
        Generate, search, or write a cyclic pattern to memory
        Set "pattern" option for basic/extended pattern type
@@ -408,12 +408,12 @@ def invoke(_peda, *arg):
        """
     global peda
     peda = _peda
-    (opt,) = normalize_argv(arg, 1)
+    (opt,) = normalize_argv(args, 1)
     if opt is None or opt not in invoke.options:
         raise Exception()
 
     func = globals()["pattern_%s" % opt]
-    func(*arg[1:])
+    func(*args[1:])
 
 
 invoke.options = ["create", "offset", "search", "patch", "arg", "env"]

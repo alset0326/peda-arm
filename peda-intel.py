@@ -57,14 +57,14 @@ MSG_LEGEND = 'Legend: %s, %s, %s, value' % (red('code'), blue('data'), green('ro
 
 ###########################################################################
 class IntelPEDACmd(PEDACmd):
-    def deactive(self, *arg):
+    def deactive(self, *args):
         """
         Bypass a function by ignoring its execution (eg sleep/alarm)
         Usage:
             MYNAME function
             MYNAME function del (re-active)
         """
-        (function, action) = normalize_argv(arg, 2)
+        (function, action) = normalize_argv(args, 2)
         if function is None:
             self._missing_argument()
 
@@ -124,14 +124,14 @@ class IntelPEDACmd(PEDACmd):
             msg('"%s" deactivated' % function)
             msg(out)
 
-    def unptrace(self, *arg):
+    def unptrace(self, *args):
         """
         Disable anti-ptrace detection
         Usage:
             MYNAME
             MYNAME del
         """
-        (action,) = normalize_argv(arg, 1)
+        (action,) = normalize_argv(args, 1)
 
         self.deactive('ptrace', action)
 
@@ -270,7 +270,7 @@ class IntelPEDACmd(PEDACmd):
         return args
 
     # get_function_args()
-    def dumpargs(self, *arg):
+    def dumpargs(self, *args):
         """
         Display arguments passed to a function when stopped at a call instruction
         Usage:
@@ -278,7 +278,7 @@ class IntelPEDACmd(PEDACmd):
                 count: force to display 'count args' instead of guessing
         """
 
-        (count,) = normalize_argv(arg, 1)
+        (count,) = normalize_argv(args, 1)
         if not self._is_running():
             return
 
@@ -291,7 +291,7 @@ class IntelPEDACmd(PEDACmd):
         else:
             msg('No argument')
 
-    def start(self, *arg):
+    def start(self, *args):
         """
         Start debugged program and stop at most convenient entry
         Usage:
@@ -303,7 +303,7 @@ class IntelPEDACmd(PEDACmd):
         for e in entries:
             out = self.peda.execute_redirect('tbreak %s' % e)
             if out and 'breakpoint' in out:
-                self.peda.execute('run %s' % ' '.join(arg))
+                self.peda.execute('run %s' % ' '.join(args))
                 started = 1
                 break
 
@@ -315,13 +315,13 @@ class IntelPEDACmd(PEDACmd):
             self.peda.execute('run')
 
     # wrapper for stepuntil('call')
-    def nextcall(self, *arg):
+    def nextcall(self, *args):
         """
         Step until next 'call' instruction in specific memory range
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(arg, 2)
+        (keyword, mapname) = normalize_argv(args, 2)
 
         if keyword:
             self.stepuntil('call.*%s' % keyword, mapname)
@@ -329,13 +329,13 @@ class IntelPEDACmd(PEDACmd):
             self.stepuntil('call', mapname)
 
     # wrapper for stepuntil('j')
-    def nextjmp(self, *arg):
+    def nextjmp(self, *args):
         """
         Step until next 'j*' instruction in specific memory range
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(arg, 2)
+        (keyword, mapname) = normalize_argv(args, 2)
 
         if keyword:
             self.stepuntil('j.*%s' % keyword, mapname)
@@ -343,7 +343,7 @@ class IntelPEDACmd(PEDACmd):
             self.stepuntil('j', mapname)
 
     # stepuntil()
-    def tracecall(self, *arg):
+    def tracecall(self, *args):
         """
         Trace function calls made by the program
         Usage:
@@ -351,7 +351,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME ['-func1,func2'] [mapname1,mapname2] (inverse)
                 default is to trace internal calls made by the program
         """
-        (funcs, mapname) = normalize_argv(arg, 2)
+        (funcs, mapname) = normalize_argv(args, 2)
 
         if not self._is_running():
             return
@@ -429,7 +429,7 @@ class IntelPEDACmd(PEDACmd):
         info('Saved trace information in file %s, view with "less -r file"' % logname)
 
     # stepuntil()
-    def traceinst(self, *arg):
+    def traceinst(self, *args):
         """
         Trace specific instructions executed by the program
         Usage:
@@ -437,7 +437,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME count (trace execution of next count instrcutions)
                 default is to trace instructions inside the program
         """
-        (insts, mapname) = normalize_argv(arg, 2)
+        (insts, mapname) = normalize_argv(args, 2)
 
         if not self._is_running():
             return
@@ -575,13 +575,13 @@ class IntelPEDACmd(PEDACmd):
         return None
 
     @msg.bufferize
-    def context_code(self, *arg):
+    def context_code(self, *args):
         """
         Display nearby disassembly at $PC of current execution context
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(arg, 1)
+        (count,) = normalize_argv(args, 1)
 
         if count is None:
             count = 8
@@ -689,7 +689,7 @@ class IntelPEDACmd(PEDACmd):
 
         return True
 
-    def eflags(self, *arg):
+    def eflags(self, *args):
         """
         Display/set/clear/toggle value of eflags register
         Usage:
@@ -697,7 +697,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME [set|clear] flagname
             MYNAME [set|clear|toggle] flagname
         """
-        (option, flagname) = normalize_argv(arg, 2)
+        (option, flagname) = normalize_argv(args, 2)
         if not self._is_running():
             return
 
@@ -725,7 +725,7 @@ class IntelPEDACmd(PEDACmd):
 
     eflags.options = ['set', 'clear', 'toggle']
 
-    def xinfo(self, *arg):
+    def xinfo(self, *args):
         """
         Display detail information of address/registers
         Usage:
@@ -733,11 +733,11 @@ class IntelPEDACmd(PEDACmd):
             MYNAME register [reg1 reg2]
         """
 
-        (address, regname) = normalize_argv(arg, 2)
+        (address, regname) = normalize_argv(args, 2)
         if address is None:
             self._missing_argument()
 
-        super(IntelPEDACmd, self).xinfo(*arg)
+        super(IntelPEDACmd, self).xinfo(*args)
         if str(address).startswith('r'):
             if regname is None or 'eflags' in regname:
                 self.eflags()
@@ -748,14 +748,14 @@ class IntelPEDACmd(PEDACmd):
     #   Exploit Helper Commands   #
     ###############################
     # elfheader()
-    def elfheader(self, *arg):
+    def elfheader(self, *args):
         """
         Get headers information from debugged ELF file
         Usage:
             MYNAME [header_name]
         """
 
-        (name,) = normalize_argv(arg, 1)
+        (name,) = normalize_argv(args, 1)
         result = self.peda.elfheader(name)
         if len(result) == 0:
             warning('%s not found, did you specify the FILE to debug?' % (name if name else 'headers'))
@@ -767,7 +767,7 @@ class IntelPEDACmd(PEDACmd):
                 msg('%s = 0x%x' % (k, start))
 
     # readelf_header(), elfheader_solib()
-    def readelf(self, *arg):
+    def readelf(self, *args):
         """
         Get headers information from an ELF file
         Usage:
@@ -775,7 +775,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME filename [header_name]
         """
 
-        (filename, hname) = normalize_argv(arg, 2)
+        (filename, hname) = normalize_argv(args, 2)
         # result = {}
         # maps = peda.get_vmmap()
         if filename is None:  # fallback to elfheader()
@@ -812,7 +812,7 @@ if __name__ == '__main__':
     pedacmd.help.__func__.options = pedacmd.commands  # XXX HACK
 
     # register 'peda' command in gdb
-    pedaGDBCommand(peda, pedacmd)
+    PedaGDBCommand(peda, pedacmd)
     Alias('pead', 'peda')  # just for auto correction
 
     # create aliases for subcommands
