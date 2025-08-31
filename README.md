@@ -12,14 +12,17 @@ Target ARM is still testing. AARCH64 is now under developing.
 
 **Update in 2025-08-28:**
 
-Try to make PEDA-ARM as a purer, lighter and more flexible debugging tools by moving more functions to plugins. Type "
-plugin" to see more help. Currently, plugins support:
+Try to make PEDA-ARM as a purer, lighter and more flexible debugging tools by moving more functions to plugins,
+which still be portable and support both python 2/3.
+Type "plugin" to see more help.
+Currently, plugins support:
 
 - plugin sample: the example plugin
 - plugin cyclic: the cyclic string generate
 - plugin intelasm: assemble on x86/x64 platform
 - plugin armasm: assemble on arm/arm64 platform
 - plugin libheap: install [libheap](https://github.com/cloudburst/libheap) via plugin
+- plugin heap: install [gef-heap](https://hugsy.github.io/gef/commands/heap/) via plugin (**recommended**)
 
 ## Key Features:
 
