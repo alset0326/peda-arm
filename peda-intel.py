@@ -608,6 +608,7 @@ class IntelPEDACmd(PEDACmd):
         # stopped at function call
         if 'call' in opcode:
             text = self.peda.disassemble_around(pc, count)
+            text = self.peda.disasm_add_regs_comments(text)
             msg(format_disasm_code_intel(text, pc))
             self.dumpargs()
         # stopped at jump
@@ -615,6 +616,7 @@ class IntelPEDACmd(PEDACmd):
             jumpto = self._testjump(inst)
             if jumpto:  # JUMP is taken
                 code = self.peda.disassemble_around(pc, count)
+                code = self.peda.disasm_add_regs_comments(code)
                 code = code.splitlines()
                 pc_idx = 999
                 text = []
@@ -636,13 +638,15 @@ class IntelPEDACmd(PEDACmd):
                     text.append('       ' + line.strip())
                 text.append(red('JUMP is taken'.rjust(self.width)))
             else:  # JUMP is NOT taken
-                text = format_disasm_code_intel(peda.disassemble_around(pc, count), pc) + os.linesep + green(
-                    'JUMP is NOT taken'.rjust(self.width))
+                text = format_disasm_code_intel(
+                    peda.disasm_add_regs_comments(peda.disassemble_around(pc, count)), pc
+                ) + os.linesep + green('JUMP is NOT taken'.rjust(self.width))
 
             msg(text)
         # stopped at other instructions
         else:
             text = self.peda.disassemble_around(pc, count)
+            text = self.peda.disasm_add_regs_comments(text)
             msg(format_disasm_code_intel(text, pc))
 
     def _get_eflags(self):
