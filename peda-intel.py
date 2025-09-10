@@ -260,9 +260,9 @@ class IntelPEDACmd(PEDACmd):
             code.reverse()
         code = os.linesep.join(code)
 
-        if 'i386' in arch:
+        if 'i386' in arch and bits == 32:
             args = self._get_function_args_32(code, argc)
-        elif '64' in arch:
+        elif '64' in arch and bits == 64:
             args = self._get_function_args_64(code, argc)
         else:
             args = []
