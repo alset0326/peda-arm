@@ -637,6 +637,7 @@ class IntelPEDACmd(PEDACmd):
                 for line in code[1:]:
                     text.append('       ' + line.strip())
                 text.append(red('JUMP is taken'.rjust(self.width)))
+                text = os.linesep.join(text)
             else:  # JUMP is NOT taken
                 text = format_disasm_code_intel(
                     peda.disasm_add_regs_comments(peda.disassemble_around(pc, count)), pc
