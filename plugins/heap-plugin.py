@@ -75,7 +75,7 @@ gef_m = importlib.import_module('plugins.gef')
 
 
 class K:
-    command_names = ['heap',
+    command_names = ('heap',
                      'heap arenas',
                      'heap bins',
                      'heap bins fast',
@@ -85,19 +85,21 @@ class K:
                      'heap bins unsorted',
                      'heap chunk',
                      'heap chunks',
-                     'heap set-arena']
+                     'heap set-arena')
     # alias must start with heap
-    command_alias = [
+    command_alias = (
         ('heap fast', 'heap bins fast'),
         ('heap large', 'heap bins large'),
         ('heap small', 'heap bins small'),
         ('heap tcache', 'heap bins tcache'),
         ('heap unsorted', 'heap bins unsorted'),
-    ]
+    )
 
     call_table = None
 
     is_init = False
+
+    cache_clears = None
 
     @staticmethod
     def init():
@@ -146,6 +148,20 @@ class K:
                 return
         K.call_table[prefix].invoke('', True)
 
+    @staticmethod
+    def reset_gef_caches():
+        if K.cache_clears is None:
+            K.cache_clears = []
+            for _, obj in vars(gef_m).items():
+                if hasattr(obj, "cache_clear"):
+                    K.cache_clears.append(obj)
+                    obj.cache_clear()
+        else:
+            for obj in K.cache_clears:
+                obj.cache_clear()
+        gef_m.gef.reset_caches()
+        return
+
 
 def invoke(peda, *args):
     """
@@ -155,6 +171,7 @@ def invoke(peda, *args):
     """
     if not K.is_init:
         K.init()
+    K.reset_gef_caches()
     K.invoke(args)
 
 
