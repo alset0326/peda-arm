@@ -145,26 +145,22 @@ class PEDA(object):
         # need more processing here
         for idx, a in enumerate(args):
             a = a.strip(',')
-            if '$' in a:  # try to get register/variable value
-                v = self.parse_and_eval(a)
-                if v is not None and v != 'void':
-                    if v.startswith('0x'):  # int
-                        args[idx] = v.split()[0]  # workaround for 0xdeadbeef <symbol+x>
-                    else:  # string, complex data
-                        args[idx] = v
-            elif a.startswith('+'):  # relative value to prev arg
+            # first handle relative value to prev arg
+            if a.startswith('+'):
                 adder = to_int(self.parse_and_eval(a[1:]))
                 if adder is not None:
                     args[idx] = '%s' % to_hex(to_int(args[idx - 1]) + adder)
-            elif is_math_exp(a):
-                try:
-                    v = eval('%s' % a)
-                    # XXX hack to avoid builtin functions/types
-                    if not isinstance(v, six.string_types + six.integer_types):
-                        continue
-                    args[idx] = '%s' % (to_hex(v) if to_int(v) is not None else v)
-                except:
-                    pass
+                    continue
+            # then parse integer
+            v = self.parse_and_eval(a)
+            if v is not None and v != 'void':
+                if v.startswith('0x'):  # int
+                    args[idx] = v.split()[0]  # workaround for 0xdeadbeef <symbol+x>
+                    continue
+                if '$' in a:
+                    # string, complex data
+                    args[idx] = v
+                    continue
         if config.Option.get('verbose') == 'on':
             msg(args)
         return args
