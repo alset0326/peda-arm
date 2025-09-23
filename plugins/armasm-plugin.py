@@ -283,7 +283,7 @@ def invoke(peda, *args):
             return
         asm.set_prefix(prefix)
 
-    (mode, address) = normalize_argv(args, 2)
+    (mode, address) = peda.normalize_argv(args, 2)
     assemble(peda, mode, address)
 
 

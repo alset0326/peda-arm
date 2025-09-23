@@ -4,6 +4,7 @@ def invoke(peda, *args):
     Usage:
         sample
     """
+    (opt,) = peda.normalize_argv(args, 1)
     print('Sample plugin successfully invoked.')
 
 

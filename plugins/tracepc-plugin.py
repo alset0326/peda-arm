@@ -26,7 +26,7 @@ def invoke(peda, *args):
         tracepc target-pc [out-file]
     """
 
-    (target_pc, filename) = normalize_argv(args, 2)
+    (target_pc, filename) = peda.normalize_argv(args, 2)
     target_pc = to_int(target_pc)
     if target_pc is None:
         raise Exception()

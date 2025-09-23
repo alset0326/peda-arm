@@ -1,8 +1,7 @@
 # copy from peda, we split it out to a separate plugin
 import re
 
-from peda import config, to_int, hex2str, to_binary_string, normalize_argv, info, msg, to_hex, to_address, warning, \
-    error
+from peda import config, to_int, hex2str, to_binary_string, info, msg, to_hex, to_address, warning, error
 
 __all__ = ['invoke']
 
@@ -176,7 +175,7 @@ def pattern_create(*args):
         cyclic create size [file]
     """
 
-    (size, filename) = normalize_argv(args, 2)
+    (size, filename) = peda.normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_create)
         return
@@ -198,7 +197,7 @@ def pattern_offset(*args):
         cyclic offset value
     """
 
-    (value,) = normalize_argv(args, 1)
+    (value,) = peda.normalize_argv(args, 1)
     if value is None:
         _missing_argument(pattern_offset)
         return
@@ -316,7 +315,7 @@ def pattern_patch(*args):
         cyclic patch address size
     """
 
-    (address, size) = normalize_argv(args, 2)
+    (address, size) = peda.normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_patch)
         return
@@ -375,7 +374,7 @@ def pattern_env(*args):
         cyclic env ENVNAME size[,offset]
     """
 
-    (env, size) = normalize_argv(args, 2)
+    (env, size) = peda.normalize_argv(args, 2)
     if size is None:
         _missing_argument(pattern_env)
         return
@@ -408,7 +407,7 @@ def invoke(_peda, *args):
        """
     global peda
     peda = _peda
-    (opt,) = normalize_argv(args, 1)
+    (opt,) = peda.normalize_argv(args, 1)
     if opt is None or opt not in invoke.options:
         raise Exception()
 

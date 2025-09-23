@@ -226,7 +226,7 @@ class ArmPEDACmd(PEDACmd):
                 count: force to display 'count args' instead of guessing
         """
 
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
         if not self._is_running():
             return
 
@@ -280,7 +280,7 @@ class ArmPEDACmd(PEDACmd):
         if SYSTEM_CALLS is None:
             return
 
-        (num,) = normalize_argv(args, 1)
+        (num,) = self.peda.normalize_argv(args, 1)
         if not self._is_running():
             return
 
@@ -314,7 +314,7 @@ class ArmPEDACmd(PEDACmd):
         """
         if SYSTEM_CALLS is None:
             return
-        (num,) = normalize_argv(args, 1)
+        (num,) = self.peda.normalize_argv(args, 1)
         if num is None:
             self._missing_argument()
         if to_int(num) is not None:
@@ -330,7 +330,7 @@ class ArmPEDACmd(PEDACmd):
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(args, 2)
+        (keyword, mapname) = self.peda.normalize_argv(args, 2)
         if keyword:
             self.stepuntil('b.*%s' % keyword, mapname)
         else:
@@ -425,8 +425,8 @@ class ArmPEDACmd(PEDACmd):
         if not match:
             return None
         cond, r, next_addr = match.groups()
-        r = self.peda.parse_and_eval(r)
-        r = to_int(r)
+        r = self.peda.parse_and_eval('$' + r)
+        r = to_int(r.split()[0])
         if r is None:
             return None
         next_addr = self.peda.parse_and_eval(next_addr)
@@ -450,7 +450,7 @@ class ArmPEDACmd(PEDACmd):
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
 
         if count is None:
             count = 8
@@ -623,7 +623,7 @@ class ArmPEDACmd(PEDACmd):
             MYNAME [set|clear|toggle] flagname
         """
 
-        (option, flagname) = normalize_argv(args, 2)
+        (option, flagname) = self.peda.normalize_argv(args, 2)
         if not self._is_running():
             return
 
@@ -667,12 +667,12 @@ class ArmPEDACmd(PEDACmd):
             MYNAME register [reg1 reg2]
         """
 
-        (address, regname) = normalize_argv(args, 2)
+        (address, regname) = self.peda.normalize_argv(args, 2)
         if address is None:
             self._missing_argument()
 
         super(ArmPEDACmd, self).xinfo(*args)
-        if str(address).startswith('r'):
+        if isinstance(address, six.string_types) and address.startswith('r'):
             if regname is None or 'cpsr' in regname:
                 self.cpsr()
 

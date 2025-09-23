@@ -363,21 +363,21 @@ def is_math_exp(str):
     return len(exp & opers) > 0 and len(exp - charset) == 0
 
 
-def normalize_argv(args, size=0):
-    """
-    Normalize argv to list with predefined length
-    """
-    args = list(args)
-    for (idx, val) in enumerate(args):
-        if to_int(val) is not None:
-            args[idx] = to_int(val)
-        if size and idx == size:
-            return args[:idx]
-
-    if size == 0:
-        return args
-    args.extend([None for _ in range(len(args), size)])
-    return args
+# def normalize_argv(args, size=0):
+#     """
+#     Normalize argv to list with predefined length
+#     """
+#     args = list(args)
+#     for (idx, val) in enumerate(args):
+#         if to_int(val) is not None:
+#             args[idx] = to_int(val)
+#         if size and idx == size:
+#             return args[:idx]
+#
+#     if size == 0:
+#         return args
+#     args.extend([None for _ in range(len(args), size)])
+#     return args
 
 
 def to_hexstr(b):
@@ -415,6 +415,8 @@ def to_int(val, base=0):
     """
     if val is None:
         return None
+    if isinstance(val, six.integer_types):
+        return val
     try:
         return int(str(val), base)
     except:

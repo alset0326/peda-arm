@@ -130,7 +130,7 @@ class PEDA(object):
 
     def string_to_argv(self, str):
         """
-        Convert a string to argv list, pre-processing register and variable values
+        Convert a string to argv list, just a wrapper for gdb.string_to_argv
 
         Args:
             - str: input string (String)
@@ -139,32 +139,68 @@ class PEDA(object):
             - argv list (List)
         """
         try:
-            str = str.encode('ascii', 'ignore')
-        except:
-            pass
-        str = decode_string_escape(str)
-        args = shlex.split(str)
-        # need more processing here
-        for idx, a in enumerate(args):
-            a = a.strip(',')
+            args = gdb.string_to_argv(str)
+        except AttributeError:
+            try:
+                str = str.encode('ascii', 'ignore')
+            except:
+                pass
+            str = decode_string_escape(str)
+            args = shlex.split(str)
+        if config.Option.get('verbose') == 'on':
+            msg(args)
+        return args
+
+    def normalize_argv(self, args, size=0, parse_eval=None):
+        """
+        Normalize argv to list with predefined length we want
+        and pre-process register and variable values, such as int is real int.
+        This method avoid that we parse a value which we don't want to parse.
+        Args:
+            args: the arg list which be handled by self.string_to_argv
+            size: returned size we want
+            parse_eval: a set or list whose index would be eval by self.parse_and_eval
+
+        Returns: args list [ int | str ]
+        """
+        args = list(args)
+        for idx, val in enumerate(args):
+            # if idx == size then args[idx] is useless
+            if size != 0 and idx == size:
+                return args[:idx]
+            # check if we need skip eval
+            if parse_eval is None or idx not in parse_eval:
+                # although a skipped value we still parse int
+                if to_int(val) is not None:
+                    args[idx] = to_int(val)
+                continue
+            if isinstance(val, six.integer_types):
+                # some method would pass an int
+                continue
+            val = val.strip(',')
             # first handle relative value to prev arg
-            if a.startswith('+'):
-                adder = to_int(self.parse_and_eval(a[1:]))
+            if val.startswith('+'):
+                adder = to_int(self.parse_and_eval(val[1:]))
                 if adder is not None:
-                    args[idx] = '%s' % to_hex(to_int(args[idx - 1]) + adder)
+                    args[idx] = '0x%x' % (to_int(args[idx - 1]) + adder)
                     continue
             # then parse integer
-            v = self.parse_and_eval(a)
+            v = self.parse_and_eval(val)
             if v is not None and v != 'void':
                 if v.startswith('0x'):  # int
-                    args[idx] = v.split()[0]  # workaround for 0xdeadbeef <symbol+x>
+                    args[idx] = to_int(v.split()[0])  # workaround for 0xdeadbeef <symbol+x>
+                    if args[idx] is None:
+                        # would this happen?
+                        args[idx] = val
                     continue
-                if '$' in a:
+                if '$' in val:
                     # string, complex data
                     args[idx] = v
                     continue
-        if config.Option.get('verbose') == 'on':
-            msg(args)
+
+        if size == 0:
+            return args
+        args.extend([None for _ in range(len(args), size)])
         return args
 
     ################################
@@ -1760,7 +1796,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [py.package.path]
         """
-        (modname,) = normalize_argv(args, 1)
+        (modname,) = self.peda.normalize_argv(args, 1)
         # save current PEDA options
         saved_opt = config.Option
         # peda_path = os.path.dirname(self.pedafile) + '/peda/'
@@ -1781,7 +1817,7 @@ class PEDACmd(object):
         Get the help text, for internal use by help command and other aliases
         """
 
-        (cmd,) = normalize_argv(args, 1)
+        (cmd,) = self.peda.normalize_argv(args, 1)
         helptext = []
         if cmd is None:
             helptext.append(red('PEDA', 'bold') + blue(' - Python Exploit Development Assistance for GDB', 'bold'))
@@ -1829,7 +1865,7 @@ class PEDACmd(object):
             MYNAME (enter interactive help)
             MYNAME help_request
         """
-        (request,) = normalize_argv(args, 1)
+        (request,) = self.peda.normalize_argv(args, 1)
         if request is None:
             self.help()
             return
@@ -1921,7 +1957,7 @@ class PEDACmd(object):
                     msg('%s = %s' % (k, v if is_printable(v) else to_hexstr(v)))
             return
 
-        (opt, name) = normalize_argv(args, 2)
+        (opt, name) = self.peda.normalize_argv(args, 2)
 
         if opt is None or opt.startswith('opt'):
             _show_option(name)
@@ -1981,7 +2017,7 @@ class PEDACmd(object):
 
             return
 
-        (opt, name, value) = normalize_argv(args, 3)
+        (opt, name, value) = self.peda.normalize_argv(args, 3)
         if opt is None:
             self._missing_argument()
 
@@ -2006,7 +2042,7 @@ class PEDACmd(object):
             MYNAME address count
             MYNAME address /count (display 'count' lines, 16-bytes each)
         """
-        (address, count) = normalize_argv(args, 2)
+        (address, count) = self.peda.normalize_argv(args, 2, (0, 1))
         if address is None:
             self._missing_argument()
 
@@ -2046,7 +2082,7 @@ class PEDACmd(object):
             else:
                 return '.'
 
-        (address, count) = normalize_argv(args, 2)
+        (address, count) = self.peda.normalize_argv(args, 2, (0, 1))
         if address is None:
             self._missing_argument()
 
@@ -2087,7 +2123,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [on|off]
         """
-        (option,) = normalize_argv(args, 1)
+        (option,) = self.peda.normalize_argv(args, 1)
         if option is None:
             out = PEDA.execute_redirect('show disable-randomization')
             if not out:
@@ -2130,7 +2166,7 @@ class PEDACmd(object):
             MYNAME address (calculate from current $SP to address)
             MYNAME address1 address2
         """
-        (start, end) = normalize_argv(args, 2)
+        (start, end) = self.peda.normalize_argv(args, 2, (0, 1))
         if to_int(start) is None or (to_int(end) is None and not self._is_running()):
             self._missing_argument()
 
@@ -2159,7 +2195,7 @@ class PEDACmd(object):
             warning('this command is only available on Linux')
             return
 
-        (pid,) = normalize_argv(args, 1)
+        (pid,) = self.peda.normalize_argv(args, 1)
 
         if not pid:
             pid = self.peda.getpid()
@@ -2235,7 +2271,7 @@ class PEDACmd(object):
             MYNAME address [count]
                 count is maximum 256
         """
-        (address, count) = normalize_argv(args, 2)
+        (address, count) = self.peda.normalize_argv(args, 2, (0, 1))
         address = to_int(address)
 
         count = to_int(count)
@@ -2260,9 +2296,9 @@ class PEDACmd(object):
         """
         Continue execution until an address or function
         Usage:
-            MYNAME address | function
+            MYNAME address
         """
-        (address,) = normalize_argv(args, 1)
+        (address,) = self.peda.normalize_argv(args, 1, (0,))
         self.peda.execute_redirect('tb *0x%x' % address)
         pc = self.peda.getpc()
         if pc is None:
@@ -2276,7 +2312,7 @@ class PEDACmd(object):
             Usage:
                 MYNAME [count]
             """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
         if to_int(count) is None:
             count = 1
 
@@ -2299,7 +2335,7 @@ class PEDACmd(object):
         Usage:
             MYNAME address
         """
-        (address,) = normalize_argv(args, 1)
+        (address,) = self.peda.normalize_argv(args, 1, (0,))
         if to_int(address) is None:
             self._missing_argument()
 
@@ -2312,7 +2348,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [count]
         """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
         if to_int(count) is None:
             count = 1
 
@@ -2334,7 +2370,7 @@ class PEDACmd(object):
             MYNAME 'inst1,inst2' (step to next inst in binary)
             MYNAME 'inst1,inst2' mapname1,mapname2
         """
-        (insts, mapname) = normalize_argv(args, 2)
+        (insts, mapname) = self.peda.normalize_argv(args, 2)
         if insts is None:
             self._missing_argument()
 
@@ -2358,7 +2394,7 @@ class PEDACmd(object):
                 count = 0: run until end of execution
                 keyword: only display stats for instructions matched it
         """
-        (count, keyword) = normalize_argv(args, 2)
+        (count, keyword) = self.peda.normalize_argv(args, 2)
 
         if count is None:
             self._missing_argument()
@@ -2418,7 +2454,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
 
         if count is None:
             count = 8
@@ -2465,7 +2501,7 @@ class PEDACmd(object):
         """
         if not self._is_running():
             return
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
         sal = self.peda.frame().find_sal()
 
         if sal.line == 0:
@@ -2499,7 +2535,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
 
         if not self._is_running():
             return
@@ -2519,7 +2555,7 @@ class PEDACmd(object):
             MYNAME [reg,source,code,stack,all] [code/stack length]
         """
 
-        (opt, count) = normalize_argv(args, 2)
+        (opt, count) = self.peda.normalize_argv(args, 2, (1,))
 
         if to_int(count) is None:
             count = 8
@@ -2590,7 +2626,7 @@ class PEDACmd(object):
             MYNAME (equiv to cat /proc/pid/maps)
         """
 
-        (mapname,) = normalize_argv(args, 1)
+        (mapname,) = self.peda.normalize_argv(args, 1)
         if not self._is_running():
             maps = self.peda.get_vmmap()
         elif to_int(mapname) is None:
@@ -2624,7 +2660,7 @@ class PEDACmd(object):
             MYNAME (will patch at current $pc)
         """
 
-        (address, data, byte) = normalize_argv(args, 3)
+        (address, data, byte) = self.peda.normalize_argv(args, 3)
         address = to_int(address)
         end_address = None
         if address is None:
@@ -2668,7 +2704,7 @@ class PEDACmd(object):
             MYNAME file start end
             MYNAME file mapname
         """
-        (filename, start, end) = normalize_argv(args, 3)
+        (filename, start, end) = self.peda.normalize_argv(args, 3)
         if end is not None and to_int(end):
             if end < start:
                 start, end = end, start
@@ -2702,7 +2738,7 @@ class PEDACmd(object):
             MYNAME file address [size]
         """
         mem = b''
-        (filename, address, size) = normalize_argv(args, 3)
+        (filename, address, size) = self.peda.normalize_argv(args, 3)
         if filename is None:
             self._missing_argument()
             return
@@ -2754,7 +2790,7 @@ class PEDACmd(object):
         Usage:
             MYNAME start end file
         """
-        (start, end, filename) = normalize_argv(args, 3)
+        (start, end, filename) = self.peda.normalize_argv(args, 3)
         if filename is None:
             self._missing_argument()
 
@@ -2795,7 +2831,7 @@ class PEDACmd(object):
         Usage:
             MYNAME start end key
         """
-        (start, end, key) = normalize_argv(args, 3)
+        (start, end, key) = self.peda.normalize_argv(args, 3, (0, 1, 2))
         if key is None:
             self._missing_argument()
 
@@ -2812,8 +2848,8 @@ class PEDACmd(object):
             MYNAME pattern start end
             MYNAME pattern mapname
         """
-        (pattern, start, end) = normalize_argv(args, 3)
-        (pattern, mapname) = normalize_argv(args, 2)
+        (pattern, start, end) = self.peda.normalize_argv(args, 3)
+        mapname = start
         if pattern is None:
             self._missing_argument()
 
@@ -2841,7 +2877,7 @@ class PEDACmd(object):
             MYNAME value mapname
             MYNAME value (search in all memory ranges)
         """
-        (search, mapname) = normalize_argv(args, 2)
+        (search, mapname) = self.peda.normalize_argv(args, 2)
         if search is None:
             self._missing_argument()
 
@@ -2862,7 +2898,7 @@ class PEDACmd(object):
             MYNAME address searchfor belongto
             MYNAME pointer searchfor belongto
         """
-        (option, searchfor, belongto) = normalize_argv(args, 3)
+        (option, searchfor, belongto) = self.peda.normalize_argv(args, 3)
         if option is None:
             self._missing_argument()
 
@@ -2895,7 +2931,7 @@ class PEDACmd(object):
             MYNAME address [linecount]
         """
 
-        (address, count) = normalize_argv(args, 2)
+        (address, count) = self.peda.normalize_argv(args, 2, (0, 1))
 
         if self._is_running():
             sp = self.peda.getreg('sp')
@@ -2906,7 +2942,7 @@ class PEDACmd(object):
             count = 8
             if address is None:
                 address = sp
-            elif not isinstance(address, int):
+            elif not isinstance(address, six.integer_types):
                 return
             elif address < 0x1000:
                 count = address
@@ -2960,14 +2996,14 @@ class PEDACmd(object):
             MYNAME register [reg1 reg2]
         """
 
-        (address, regname) = normalize_argv(args, 2)
+        (address, regname) = self.peda.normalize_argv(args, 2)
         if address is None:
             self._missing_argument()
 
         if not self._is_running():
             return
 
-        if str(address).startswith('r'):
+        if isinstance(address, six.string_types) and address.startswith('r'):
             def get_reg_text(r, v):
                 return '%s: %s' % (
                     green('%s' % r.upper().ljust(3)),
@@ -3037,13 +3073,13 @@ class PEDACmd(object):
             MYNAME mapname [minlen]
             MYNAME (display all printable strings in binary - slow)
         """
-        (start, end, minlen) = normalize_argv(args, 3)
+        (start, end, minlen) = self.peda.normalize_argv(args, 3)
 
         mapname = None
         if start is None:
             mapname = 'binary'
         elif to_int(start) is None or (end < start):
-            (mapname, minlen) = normalize_argv(args, 2)
+            mapname, minlen = start, end
 
         if minlen is None:
             minlen = 1
@@ -3080,7 +3116,7 @@ class PEDACmd(object):
             MYNAME pattern mapname
             MYNAME pattern
         """
-        (pattern,) = normalize_argv(args, 1)
+        (pattern,) = self.peda.normalize_argv(args, 1)
 
         if pattern is None:
             self._missing_argument()
@@ -3103,7 +3139,7 @@ class PEDACmd(object):
             MYNAME 'string' start end
             MYNAME 'string' [mapname] (default is search in current binary)
         """
-        (search, start, end) = normalize_argv(args, 3)
+        (search, start, end) = self.peda.normalize_argv(args, 3)
         if search is None:
             self._missing_argument()
 
@@ -3143,7 +3179,7 @@ class PEDACmd(object):
         Usage:
             MYNAME command arg
         """
-        (command, carg) = normalize_argv(args, 2)
+        (command, carg) = self.peda.normalize_argv(args, 2)
         # todo maybe add? mention below
         cmds = ['int2str', 'intlist2str', 'str2intlist']
         if not command or command not in cmds or not carg:
@@ -3186,7 +3222,7 @@ class PEDACmd(object):
         Usage:
             MYNAME [name] [reload]
         """
-        (name, opt) = normalize_argv(args, 2)
+        (name, opt) = self.peda.normalize_argv(args, 2)
         if name is None:
             msg('Available plugins:', 'blue')
             files = []

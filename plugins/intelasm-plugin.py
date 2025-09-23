@@ -150,7 +150,7 @@ def readelf(self, *args):
         MYNAME filename [header_name]
     """
 
-    (filename, hname) = normalize_argv(args, 2)
+    (filename, hname) = self.normalize_argv(args, 2)
     # result = {}
     # maps = peda.get_vmmap()
     if filename is None:  # fallback to elfheader()
@@ -223,7 +223,7 @@ def assemble(peda, mode, address):
             break
         if inst == "":
             continue
-        bincode = asm.assemble(inst, mode)
+        bincode = Nasm.assemble(inst, mode)
         if bincode is None:
             continue
         size = len(bincode)
@@ -254,7 +254,7 @@ def invoke(peda, *args):
         intelasm [mode] [address]
             mode: -b16 / -b32 / -b64
     """
-    (mode, address) = normalize_argv(args, 2)
+    (mode, address) = peda.normalize_argv(args, 2)
     assemble(peda, mode, address)
 
 

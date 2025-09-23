@@ -64,7 +64,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME function
             MYNAME function del (re-active)
         """
-        (function, action) = normalize_argv(args, 2)
+        (function, action) = self.peda.normalize_argv(args, 2)
         if function is None:
             self._missing_argument()
 
@@ -131,7 +131,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME
             MYNAME del
         """
-        (action,) = normalize_argv(args, 1)
+        (action,) = self.peda.normalize_argv(args, 1)
 
         self.deactive('ptrace', action)
 
@@ -278,7 +278,7 @@ class IntelPEDACmd(PEDACmd):
                 count: force to display 'count args' instead of guessing
         """
 
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
         if not self._is_running():
             return
 
@@ -321,7 +321,7 @@ class IntelPEDACmd(PEDACmd):
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(args, 2)
+        (keyword, mapname) = self.peda.normalize_argv(args, 2)
 
         if keyword:
             self.stepuntil('call.*%s' % keyword, mapname)
@@ -335,7 +335,7 @@ class IntelPEDACmd(PEDACmd):
         Usage:
             MYNAME [keyword] [mapname1,mapname2]
         """
-        (keyword, mapname) = normalize_argv(args, 2)
+        (keyword, mapname) = self.peda.normalize_argv(args, 2)
 
         if keyword:
             self.stepuntil('j.*%s' % keyword, mapname)
@@ -351,7 +351,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME ['-func1,func2'] [mapname1,mapname2] (inverse)
                 default is to trace internal calls made by the program
         """
-        (funcs, mapname) = normalize_argv(args, 2)
+        (funcs, mapname) = self.peda.normalize_argv(args, 2)
 
         if not self._is_running():
             return
@@ -437,7 +437,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME count (trace execution of next count instrcutions)
                 default is to trace instructions inside the program
         """
-        (insts, mapname) = normalize_argv(args, 2)
+        (insts, mapname) = self.peda.normalize_argv(args, 2)
 
         if not self._is_running():
             return
@@ -581,7 +581,7 @@ class IntelPEDACmd(PEDACmd):
         Usage:
             MYNAME [linecount]
         """
-        (count,) = normalize_argv(args, 1)
+        (count,) = self.peda.normalize_argv(args, 1, (0,))
 
         if count is None:
             count = 8
@@ -702,7 +702,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME [set|clear] flagname
             MYNAME [set|clear|toggle] flagname
         """
-        (option, flagname) = normalize_argv(args, 2)
+        (option, flagname) = self.peda.normalize_argv(args, 2)
         if not self._is_running():
             return
 
@@ -738,12 +738,12 @@ class IntelPEDACmd(PEDACmd):
             MYNAME register [reg1 reg2]
         """
 
-        (address, regname) = normalize_argv(args, 2)
+        (address, regname) = self.peda.normalize_argv(args, 2)
         if address is None:
             self._missing_argument()
 
         super(IntelPEDACmd, self).xinfo(*args)
-        if str(address).startswith('r'):
+        if isinstance(address, six.string_types) and address.startswith('r'):
             if regname is None or 'eflags' in regname:
                 self.eflags()
 
@@ -760,7 +760,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME [header_name]
         """
 
-        (name,) = normalize_argv(args, 1)
+        (name,) = self.peda.normalize_argv(args, 1)
         result = self.peda.elfheader(name)
         if len(result) == 0:
             warning('%s not found, did you specify the FILE to debug?' % (name if name else 'headers'))
@@ -780,7 +780,7 @@ class IntelPEDACmd(PEDACmd):
             MYNAME filename [header_name]
         """
 
-        (filename, hname) = normalize_argv(args, 2)
+        (filename, hname) = self.peda.normalize_argv(args, 2)
         # result = {}
         # maps = peda.get_vmmap()
         if filename is None:  # fallback to elfheader()
