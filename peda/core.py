@@ -3312,11 +3312,8 @@ class PluginCommand(gdb.Command):
             return []
         func = self.pedacmd.plugins.get(self.name)
         options = func.options if hasattr(func, 'options') else []
-        opname = [x for x in options if word in x]
-        if opname:
-            return opname
-        else:
-            return []
+        opname = [x for x in options if x.startswith(word)]
+        return opname
 
 
 ###########################################################################
@@ -3358,12 +3355,12 @@ class PedaGDBCommand(gdb.Command):
 
     def complete(self, text, word):
         completion = []
-        if text != '':
+        if len(text) != 0:
             cmd = text.split()[0]
             if cmd in self.pedacmd.commands:
                 func = getattr(self.pedacmd, cmd)
-                for opt in func.options:
-                    if word in opt:
+                for opt in getattr(func, 'options', ()):
+                    if word is None or word in opt:
                         completion.append(opt)
             else:
                 for cmd in self.pedacmd.commands:
@@ -3371,7 +3368,7 @@ class PedaGDBCommand(gdb.Command):
                         completion.append(cmd)
         else:
             for cmd in self.pedacmd.commands:
-                if word in cmd and cmd not in completion:
+                if word is None or word in cmd and cmd not in completion:
                     completion.append(cmd)
         return completion
 
