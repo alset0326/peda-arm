@@ -118,7 +118,9 @@ class PEDA(object):
 
         try:
             return str(gdb.parse_and_eval(exp))
-        except:
+        except Exception as e:
+            if 'No symbol ' in str(e):
+                return None
             if not PEDA.execute_redirect('print %s' % exp):
                 return None
             out = str(gdb.history(0))
@@ -2904,6 +2906,8 @@ class PEDACmd(object):
             count = 8
             if address is None:
                 address = sp
+            elif not isinstance(address, int):
+                return
             elif address < 0x1000:
                 count = address
                 address = sp
