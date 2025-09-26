@@ -3053,17 +3053,30 @@ class PEDACmd(object):
         else:
             # Address
             chain = self.peda.examine_mem_reference(address)
-            text = format_reference_chain(chain) + '\n'
+            text = blue('Memory Examining:\n  ', 'bold') + format_reference_chain(chain)
             vmrange = self.peda.get_vmrange(address)
             if vmrange:
+                just = 10 if self.peda.intsize() == 4 else 18
                 (start, end, perm, name) = vmrange
-                text += 'Virtual memory mapping:\n' \
-                        + green('Start : %s\n' % to_address(start)) \
-                        + green('End   : %s\n' % to_address(end)) \
-                        + yellow('Offset: 0x%x\n' % (address - start)) \
-                        + red('Perm  : %s\n' % perm) \
-                        + blue('Name  : %s' % name)
-            msg(text)
+                maps = self.peda.get_vmmap()
+                maps.sort(key=lambda a: a[0])
+                idx = 0
+                for idx, (a, _, _, _) in enumerate(maps):
+                    if a == start:
+                        break
+                while idx > 0 and name == maps[idx - 1][3]:
+                    idx -= 1
+                file_base = maps[idx][0]
+                text += blue('\n\nMemory Mapping:\n', 'bold') + \
+                        '  %s %s %s\t%s\n\n' % (
+                            to_address(start).ljust(just, ' '), to_address(end).ljust(just, ' '), perm, name) + \
+                        blue('Memory Offsets:\n', 'bold') + \
+                        green('  Mapped Area : %s = %s + %s\n' % (
+                            to_address(address), to_address(start), to_address(address - start))) + \
+                        yellow('  File Base   : %s = %s + %s\n' % (
+                            to_address(address), to_address(file_base), to_address(address - file_base)))
+
+                msg(text)
 
     def strings(self, *args):
         """
