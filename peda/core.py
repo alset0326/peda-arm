@@ -692,7 +692,7 @@ class PEDA(object):
             line = [line]
             for reg in (reg_names & words):
                 # todo: use examine_mem_value?
-                line.append(' \t// %s => 0x%x' % (reg, regs[reg]))
+                line.append(' \t// %s=0x%x' % (reg, regs[reg]))
             l.append(''.join(line))
         return os.linesep.join(l)
 
@@ -1367,7 +1367,7 @@ class PEDA(object):
                 search = '0x' + codecs.encode(mem[i:i + step][::-1], 'hex').decode('utf-8')
                 addr = to_int(search)
                 if self.is_address(addr):
-                    (v, t, vn) = self.examine_mem_value(addr)
+                    (v, c, t, vn) = self.examine_mem_value(addr)
                     if t != 'value':
                         if self.is_address(to_int(vn), belongto_ranges):
                             if (to_int(v), v) not in search_result:
@@ -1439,6 +1439,52 @@ class PEDA(object):
         return result
 
     @memoized
+    def resolve_addr(self, address):
+        """
+        Copy from pwndbg
+        Retrieve the name for the symbol located at `address`
+        Empty string if no symbol
+        """
+
+        # Fast path: GDB's `info symbol` returns 'Numeric constant too large' here
+        if address >= ((1 << 64) - 1):
+            return None
+
+        # This sucks, but there's not a GDB API for this.
+        # Workaround for a bug with Rust language, see #2094
+        result = self.execute_redirect("info symbol 0x%x" % address)
+
+        if not result:
+            return None
+
+        if result.startswith("No symbol"):
+            return None
+
+        # If there are newlines, which means that there are multiple symbols for the address
+        # then use the first one (see also #1610)
+        result = result[: result.index("\n")]
+
+        # See https://github.com/bminor/binutils-gdb/blob/d1702fea87aa62dff7de465464097dba63cc8c0f/gdb/printcmd.c#L1594-L1624
+        # The most often encountered formats looks like this:
+        #   "main in section .text of /bin/bash"
+        #   "main + 3 in section .text of /bin/bash"
+        #   "system + 1 in section .text of /lib/x86_64-linux-gnu/libc.so.6"
+        #   "No symbol matches system-1"
+        # But there are some others that we have to account for as well
+        if " in section " in result:
+            loc_string, _ = result.split(" in section ")
+        elif " in load address range of " in result:
+            loc_string, _ = result.split(" in load address range of ")
+        elif " overlay section " in result:
+            result, _ = result.split(" overlay section ")
+            loc_string, _ = result.split(" in ")
+        else:
+            return None
+
+        # If there is 'main + 87' we want to replace it with 'main+87' etc.
+        return loc_string.replace(" + ", "+")
+
+    @memoized
     def examine_mem_value(self, value):
         """
         Examine a value in memory for its type and reference
@@ -1447,38 +1493,39 @@ class PEDA(object):
             - value: value to examine (Int)
 
         Returns:
-            - tuple of (value(Int), type(String), next_value(Int))
+            - tuple of (addr(int), comment(str or None), type(str), next_addr(int or None))
         """
 
-        def examine_data(value, bits=32):
-            out = PEDA.execute_redirect('x/%sx 0x%x' % ('g' if bits == 64 else 'w', value))
-            if out:
-                v = out.split(':\t')[-1].strip()
-                if is_printable(int2str(to_int(v), bits // 8)):
-                    out = PEDA.execute_redirect('x/s 0x%x' % value)
-            return out
+        def pack_data_result(_addr, _type):
+            """
+            Try to examine a str in memory and generate the tuple result
+            Returns:
+                - tuple of (target_value(int), target_str(str or None))
+            """
+            (_, _bits) = self.getarch()
+            _v = self.read_int(_addr, _bits // 8)
+            if is_printable(int2str(_v, _bits // 8)):
+                _s = PEDA.execute_redirect('x/s 0x%x' % _addr)
+                _s = _s.split(':', 1)[1].strip()
+                _v = None
+            else:
+                _s = self.resolve_addr(_addr)
+            return (_addr, _s, _type, _v)
 
-        result = (None, None, None)
         if value is None:
-            return result
+            return (None, None, None, None)
 
         # maps = self.get_vmmap()
         binmap = self.get_vmmap('binary')
 
-        (arch, bits) = self.getarch()
         if not self.is_address(value):  # a value
-            result = (to_hex(value), 'value', '')
-            return result
+            return (value, None, 'value', None)
         else:
             (_, _, _, mapname) = self.get_vmrange(value)
 
         # check for writable first so rwxp mem will be treated as data
         if self.is_writable(value):  # writable data address
-            out = examine_data(value, bits)
-            if out:
-                result = (to_hex(value), 'data', out.split(':', 1)[1].strip())
-            else:
-                result = (to_hex(value), 'data', None)
+            result = pack_data_result(value, 'data')
 
         elif self.is_executable(value):  # code/rodata address
             if self.is_address(value, binmap):
@@ -1493,32 +1540,21 @@ class PEDA(object):
                         if type == 'code':
                             out = self.get_disasm(value)
                             m = RE.DISASM_LINE_WITH_CONTENT.search(out)
-                            result = (to_hex(value), 'code', m.group(1))
-                        else:  # rodata address
-                            out = examine_data(value, bits)
-                            result = (to_hex(value), 'rodata', out.split(':', 1)[1].strip())
-                        break
-
-                if result[0] is None:  # not fall to any header section
-                    out = examine_data(value, bits)
-                    result = (to_hex(value), 'rodata', out.split(':', 1)[1].strip())
+                            result = (value, m.group(1), 'code', None)
+                            break
+                else:  # rodata address or not fall to any header section
+                    result = pack_data_result(value, 'rodata')
 
             else:  # not belong to any lib: [heap], [vdso], [vsyscall], etc
                 out = self.get_disasm(value)
                 if '(bad)' in out:
-                    out = examine_data(value, bits)
-                    result = (to_hex(value), 'rodata', out.split(':', 1)[1].strip())
+                    result = pack_data_result(value, 'rodata')
                 else:
-                    p = re.compile(r'.*?0x[^ ]*?\s(.*)')
-                    m = p.search(out)
-                    result = (to_hex(value), 'code', m.group(1))
+                    m = RE.DISASM_LINE_WITH_CONTENT.search(out)
+                    result = (value, m.group(1), 'code', None)
 
         else:  # readonly data address
-            out = examine_data(value, bits)
-            if out:
-                result = (to_hex(value), 'rodata', out.split(':', 1)[1].strip())
-            else:
-                result = (to_hex(value), 'rodata', 'MemError')
+            result = pack_data_result(value, 'rodata')
 
         return result
 
@@ -1531,24 +1567,20 @@ class PEDA(object):
             - value: value to examine (Int)
 
         Returns:
-            - list of tuple of (value(Int), type(String), next_value(Int))
+            - list of tuple of (addr(int), comment(str or None), type(str), next_addr(int or None))
         """
         result = []
-        (v, t, vn) = self.examine_mem_value(value)
-        count = 0
-        while vn is not None and count < 5:
-            result.append((v, t, vn))
-            if v == vn or to_int(v) == to_int(vn):  # point to self
+        na = value
+        for _ in range(5):
+            (a, c, t, na) = self.examine_mem_value(na)
+            # append before check
+            result.append((a, c, t, na))
+            if not na:
                 break
-            if to_int(vn) is None:
+            if a == na:  # point to self
                 break
-            if to_int(vn) in [to_int(v) for (v, _, _) in result]:  # point back to previous value
+            if na in [v for (v, _, _, _) in result]:  # point back to previous value
                 break
-            (v, t, vn) = self.examine_mem_value(to_int(vn))
-            count += 1
-        else:
-            if vn is not None:
-                result.append((v, t, '--> ...'))
 
         return result
 

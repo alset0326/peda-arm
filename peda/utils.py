@@ -522,34 +522,38 @@ def format_address(addr, type):
         'rodata': 'green',
         'value': None
     }
-    return colorize(addr, colorcodes[type])
+    return colorize(to_hex(addr) if isinstance(addr, six.integer_types) else addr, colorcodes[type])
 
 
 @memoized
 def format_reference_chain(chain):
     """
     Colorize a chain of references
+
+    Args
+        - chain: list of tuple of (addr(int), comment(str or None), type(str), next_addr(int or None))
     """
     if not chain:
         return 'Cannot access memory address'
     else:
-        v = t = vn = None
         l = []
-        first = True
-        for (v, t, vn) in chain:
-            if t != 'value':
-                l.append('%s%s ' % ('--> ' if not first else '', format_address(v, t)))
+        arrow = ''
+        a = na = 0
+        for (a, c, t, na) in chain:
+            if t == 'value':
+                # value has only addr
+                l.append('%s%s ' % (arrow, to_hex(a)))
             else:
-                l.append('%s%s ' % ('--> ' if not first else '', v))
-            first = False
+                l.append('%s%s %s' % (arrow, format_address(a, t), '(%s) ' % c if c else ''))
+            arrow = '-> '
 
-        if vn:
-            l.append('(%s)' % vn)
-        else:
-            if v != '0x0':
-                s = hex2str(v)
-                if is_printable(s, '\x00'):
-                    l.append('(%s)' % string_repr(s.split(b'\x00')[0]))
+        # if na:
+        #     l.append('-> ...')
+        if a > 0:
+            s = hex2str(a)
+            if is_printable(s, '\x00'):
+                l.append('(%s)' % string_repr(s.split(b'\x00')[0]))
+
         return ''.join(l)
 
 
@@ -658,7 +662,7 @@ def format_disasm_code_intel(code, current=None):
         'test': 'red',
         'call': 'green',
         'j': 'yellow',  # jump
-        'ret': 'blue',
+        'ret': 'cyan',
     }
     return format_disasm_code_with_opcode_color(code, current=current, opcode_color=colorcodes)
 
@@ -914,7 +918,7 @@ class RE:
     DISASM_LINE_WITH_COMMENTS = re.compile(r'[^#]+#\s*(0x\S*)')
 
     # disasm line to content which trim addr
-    DISASM_LINE_WITH_CONTENT = re.compile(r'.*0x[^ ]+\s*(.*)')
+    DISASM_LINE_WITH_CONTENT = re.compile(r'.*0x[^:]+:\s*(.*)')
 
     # memory access with []
     # DWORD PTR [esi+eax*1]

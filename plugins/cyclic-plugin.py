@@ -259,7 +259,7 @@ def pattern_search(*args):
     if reg_result:
         msg("Registers point to pattern buffer:", "yellow")
         for (r, (d, l, o)) in reg_result.items():
-            msg("[%s] %s offset %d - size ~%d" % (r.upper(), "-->" * d, o, l))
+            msg("[%s] %s offset %d - size ~%d" % (r.upper(), "->" * d, o, l))
     else:
         msg("No register points to pattern buffer")
 
